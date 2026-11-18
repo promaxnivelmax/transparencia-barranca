@@ -477,3 +477,32 @@ tbody tr { animation: aparecerArriba 0.35s ease both; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* ----- Buscador en el Inicio ----- */
+.zona-busqueda { margin-top: 18px; animation: aparecerArriba 0.4s ease both; }
+.zona-busqueda[hidden] { display: none; }
+.zona-busqueda .bloque { position: relative; }
+.cerrar-busqueda { float: right; margin-left: 10px; }
+.centrado { justify-content: center; margin-top: 16px; }
+
+/* ----- Mapa interactivo ----- */
+.mapa-interactivo { height: 460px; border-radius: 16px; overflow: hidden; border: 1px solid var(--borde-vidrio); background: #141414; }
+.mapa-cargando { padding: 20px; color: var(--texto-suave); }
+.mapa-controles { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.marcador-amarillo span, .marcador-gris span {
+  display: block; width: 100%; height: 100%; border-radius: 50%;
+  background: var(--amarillo); border: 2px solid #0a0a0a; box-shadow: 0 0 0 0 rgba(255,193,35,0.6);
+  animation: brilloBoton 2.4s ease-out infinite;
+}
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #1c1c1c; color: var(--texto); border: 1px solid var(--borde-vidrio); }
+.leaflet-popup-content strong { color: var(--amarillo); }
+.leaflet-container a { color: var(--amarillo); }
+.leaflet-bar a { background: #1c1c1c; color: var(--texto); border-color: var(--borde-vidrio); }
+.leaflet-bar a:hover { background: #2e2e2e; }
+@media (max-width: 640px) { .mapa-interactivo { height: 360px; } }
+
+/* ----- Barranca en datos y candidatos ----- */
+.lista-sectores { padding-left: 20px; display: grid; gap: 6px; color: var(--texto-suave); font-size: 14px; }
+.lista-sectores b { color: var(--amarillo); margin-left: 6px; }
+.filtros-candidatos { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin: 14px 0 8px; }
+@media (max-width: 760px) { .filtros-candidatos { grid-template-columns: 1fr; } }

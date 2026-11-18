@@ -32,12 +32,13 @@
     </div>
     <nav class="menu" id="menu" aria-label="Secciones">
       <button class="pestana-btn activa" data-tab="inicio">Inicio</button>
-      <button class="pestana-btn" data-tab="buscar">Buscar en SECOP</button>
       <button class="pestana-btn" data-tab="alertas">Alertas</button>
       <button class="pestana-btn" data-tab="entidades">Entidades</button>
       <button class="pestana-btn" data-tab="secretarias">Secretarías</button>
       <button class="pestana-btn" data-tab="contratistas">Contratistas</button>
       <button class="pestana-btn" data-tab="contratos">Contratos</button>
+      <button class="pestana-btn" data-tab="datos">Barranca en datos</button>
+      <button class="pestana-btn" data-tab="candidatos">Candidatos</button>
       <button class="pestana-btn" data-tab="metodologia">Metodología</button>
     </nav>
   </header>
@@ -225,6 +226,39 @@
 
     <!-- ===== PESTAÑA: INICIO (indicadores + gráficos) ===== -->
     <section class="pestana activa" data-tab="inicio">
+    <!-- ===== RESULTADOS DEL BUSCADOR (SECOP I y II, todos los años) ===== -->
+    <section id="zonaBusqueda" class="zona-busqueda" hidden>
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Resultados en SECOP I y SECOP II</h2>
+          <p>Todos los años, directamente en la base oficial de Colombia Compra Eficiente. Puedes afinar la búsqueda aquí.</p>
+        </div>
+        <button class="cerrar-busqueda boton-secundario" id="btnCerrarBusqueda">Cerrar resultados ✕</button>
+        <form id="formBuscar" class="form-buscar">
+          <select id="tipoBusqueda" aria-label="Buscar por">
+            <option value="nombre">Nombre o razón social</option>
+            <option value="documento">Cédula o NIT</option>
+            <option value="contrato">Número de contrato</option>
+            <option value="objeto">Palabra en el objeto</option>
+          </select>
+          <input type="search" id="textoBusqueda" placeholder="Ej: Aseos y Servicios de Colombia" required>
+          <select id="alcanceBusqueda" aria-label="Dónde buscar">
+            <option value="barranca">Solo entidades de Barrancabermeja</option>
+            <option value="colombia">Toda Colombia</option>
+          </select>
+          <button type="submit" id="btnBuscar">Buscar</button>
+        </form>
+        <p id="resultadoBusquedaInfo" class="info-busqueda">Consejo: escribe el nombre con y sin tildes, o solo los apellidos. Si el contrato lo firmó una entidad de otro municipio (por ejemplo, la Gobernación), escoge «Toda Colombia».</p>
+        <div class="resumen-busqueda" id="resumenBusqueda" hidden></div>
+        <div class="tabla-contenedor" id="contenedorResultados" hidden>
+          <table>
+            <thead><tr><th>Firma</th><th>Contrato</th><th>Entidad</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Origen</th><th>Valor</th><th>Página oficial</th></tr></thead>
+            <tbody id="tablaResultados"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
       <div class="kpis">
         <article class="kpi vidrio"><span>Contratos</span><strong id="kpiContratos">…</strong><small id="kpiContratosNota"></small></article>
         <article class="kpi vidrio"><span>Valor contratado</span><strong id="kpiValor">…</strong><small id="kpiValorNota"></small></article>
@@ -238,74 +272,17 @@
 
       <section class="vidrio bloque mapa-bloque">
         <div class="bloque-titulo">
-          <h2>Barrancabermeja, Distrito Especial</h2>
-          <p>Mapa ilustrativo (no a escala) del casco urbano, sus 7 comunas y los corregimientos, a orillas del río Magdalena.</p>
+          <h2>Mapa interactivo de Barrancabermeja</h2>
+          <p>Muévelo, acércalo y toca cada punto: son los puestos de votación de las elecciones territoriales 2023, con su dirección y comuna (Registraduría).</p>
         </div>
-        <svg class="mapa-barranca" viewBox="0 0 700 500" role="img" aria-label="Mapa ilustrativo de Barrancabermeja con el río Magdalena, las ciénagas, la refinería, las 7 comunas y los corregimientos">
-          <defs>
-            <pattern id="cuadricula" width="20" height="20" patternUnits="userSpaceOnUse">
-              <path d="M20 0H0V20" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-            </pattern>
-          </defs>
-          <rect width="700" height="500" fill="url(#cuadricula)"/>
-          <!-- Límite del Distrito (ilustrativo) -->
-          <path class="mapa-limite" d="M120 40 L330 22 L470 60 L600 48 L660 140 L640 260 L668 360 L560 430 L400 420 L300 446 L190 400 L150 300 L96 230 L110 130 Z"
-                fill="rgba(255,255,255,0.04)" stroke="#9e9e9e" stroke-width="2" stroke-dasharray="6 5"/>
-          <!-- Río Magdalena -->
-          <path class="mapa-rio" d="M70 0 C120 60 90 120 130 170 C170 220 120 270 160 330 C190 380 150 420 180 460"
-                fill="none" stroke="#5a5a5a" stroke-width="22" stroke-linecap="round"/>
-          <path class="mapa-rio-corriente" d="M70 0 C120 60 90 120 130 170 C170 220 120 270 160 330 C190 380 150 420 180 460"
-                fill="none" stroke="#b3b3b3" stroke-opacity="0.35" stroke-width="2" stroke-dasharray="3 18" stroke-linecap="round"/>
-          <text x="40" y="250" class="mapa-texto mapa-rio-txt" transform="rotate(-80 40 250)">Río Magdalena</text>
-          <!-- Río Opón y río Sogamoso (ilustrativos) -->
-          <path d="M175 400 C260 380 330 400 420 380 C500 360 560 390 640 370" fill="none" stroke="#4a4a4a" stroke-width="5" stroke-linecap="round"/>
-          <text x="430" y="400" class="mapa-texto pequeno">Río Opón</text>
-          <path d="M100 40 C180 30 260 60 330 30" fill="none" stroke="#4a4a4a" stroke-width="5" stroke-linecap="round"/>
-          <text x="150" y="66" class="mapa-texto pequeno">Río Sogamoso</text>
-          <!-- Ciénagas -->
-          <ellipse cx="300" cy="105" rx="46" ry="20" fill="#3a3a3a"/><text x="300" y="80" class="mapa-texto pequeno" text-anchor="middle">Ciénaga El Llanito</text>
-          <ellipse cx="335" cy="245" rx="40" ry="18" fill="#3a3a3a"/><text x="335" y="276" class="mapa-texto pequeno" text-anchor="middle">Ciénaga San Silvestre</text>
-          <ellipse cx="250" cy="355" rx="30" ry="13" fill="#3a3a3a"/>
-          <!-- Casco urbano: 7 comunas -->
-          <g class="mapa-comunas">
-            <path d="M160 150 h40 v38 h-40 z"/><path d="M200 150 h40 v38 h-40 z"/><path d="M240 150 h38 v38 h-38 z"/>
-            <path d="M160 188 h40 v38 h-40 z"/><path class="comuna-5" d="M200 188 h40 v38 h-40 z"/><path d="M240 188 h38 v38 h-38 z"/>
-            <path d="M200 226 h40 v32 h-40 z"/>
-          </g>
-          <g class="mapa-numeros">
-            <text x="180" y="174">1</text><text x="220" y="174">2</text><text x="259" y="174">3</text>
-            <text x="180" y="212">4</text><text x="220" y="212" class="numero-5">5</text><text x="259" y="212">6</text>
-            <text x="220" y="247">7</text>
-          </g>
-          <text x="220" y="140" class="mapa-texto" text-anchor="middle">Casco urbano</text>
-          <!-- Refinería -->
-          <g class="mapa-refineria">
-            <rect x="150" y="262" width="34" height="22" rx="3" fill="#2e2e2e" stroke="#ffc123"/>
-            <circle class="mapa-pulso" cx="167" cy="273" r="5" fill="#ffc123"/>
-          </g>
-          <text x="196" y="290" class="mapa-texto pequeno">Refinería</text>
-          <!-- Corregimientos -->
-          <g class="mapa-puntos">
-            <circle cx="345" cy="135" r="6"/><circle cx="560" cy="250" r="6"/><circle cx="470" cy="180" r="6"/>
-            <circle cx="300" cy="330" r="6"/><circle cx="520" cy="330" r="6"/><circle cx="600" cy="120" r="6"/>
-          </g>
-          <g class="mapa-texto pequeno">
-            <text x="356" y="139">El Llanito</text><text x="571" y="254">El Centro</text><text x="481" y="184">La Fortuna</text>
-            <text x="311" y="334">Ciénaga del Opón</text><text x="531" y="334">San Rafael de Chucurí</text><text x="530" y="112">Meseta de San Rafael</text>
-          </g>
-          <!-- Rosa de los vientos -->
-          <g transform="translate(650 440)">
-            <path d="M0 -22 L6 0 L0 22 L-6 0 Z" fill="#9e9e9e"/><path d="M0 -22 L6 0 L-6 0 Z" fill="#ffc123"/>
-            <text y="-28" class="mapa-texto pequeno" text-anchor="middle">N</text>
-          </g>
-          <!-- Leyenda -->
-          <g transform="translate(200 476)" class="mapa-texto pequeno">
-            <rect width="12" height="12" fill="#ffc123"/><text x="18" y="10">Comuna 5</text>
-            <rect x="110" width="12" height="12" fill="#3a3a3a" stroke="#9e9e9e"/><text x="128" y="10">Comunas 1 a 7</text>
-            <circle cx="246" cy="6" r="5" fill="#e6e6e6"/><text x="258" y="10">Corregimientos</text>
-            <rect x="370" width="12" height="12" fill="#3a3a3a"/><text x="388" y="10">Ciénagas</text>
-          </g>
-        </svg>
+        <div class="mapa-controles">
+          <select id="mapaComuna" aria-label="Filtrar puestos por comuna"><option value="">Todas las comunas y zonas</option></select>
+          <span id="mapaConteo" class="nota-pequena"></span>
+        </div>
+        <div id="mapaInteractivo" class="mapa-interactivo" role="application" aria-label="Mapa interactivo de Barrancabermeja">
+          <p class="mapa-cargando">Cargando mapa…</p>
+        </div>
+        <p class="nota-pequena">Mapa base © colaboradores de OpenStreetMap · © CARTO. Puestos: Divipole 2023 (Registraduría, datos.gov.co).</p>
       </section>
 
       <div class="graficos">
@@ -333,38 +310,6 @@
           <h2>Estado reportado en SECOP</h2>
           <div class="lienzo"><canvas id="gEstados"></canvas></div>
         </article>
-      </div>
-    </section>
-
-    <!-- ===== PESTAÑA: BUSCAR EN SECOP I Y II (todos los años) ===== -->
-    <section class="pestana" data-tab="buscar">
-      <div class="vidrio bloque">
-        <div class="bloque-titulo">
-          <h2>Buscador de contratos en SECOP I y SECOP II</h2>
-          <p>Busca en todos los años, directamente en la base oficial de Colombia Compra Eficiente.</p>
-        </div>
-        <form id="formBuscar" class="form-buscar">
-          <select id="tipoBusqueda" aria-label="Buscar por">
-            <option value="nombre">Nombre o razón social</option>
-            <option value="documento">Cédula o NIT</option>
-            <option value="contrato">Número de contrato</option>
-            <option value="objeto">Palabra en el objeto</option>
-          </select>
-          <input type="search" id="textoBusqueda" placeholder="Ej: Aseos y Servicios de Colombia" required>
-          <select id="alcanceBusqueda" aria-label="Dónde buscar">
-            <option value="barranca">Solo entidades de Barrancabermeja</option>
-            <option value="colombia">Toda Colombia</option>
-          </select>
-          <button type="submit" id="btnBuscar">Buscar</button>
-        </form>
-        <p id="resultadoBusquedaInfo" class="info-busqueda">Consejo: escribe el nombre con y sin tildes, o solo los apellidos. Si el contrato lo firmó una entidad de otro municipio (por ejemplo, la Gobernación), escoge «Toda Colombia».</p>
-        <div class="resumen-busqueda" id="resumenBusqueda" hidden></div>
-        <div class="tabla-contenedor" id="contenedorResultados" hidden>
-          <table>
-            <thead><tr><th>Firma</th><th>Contrato</th><th>Entidad</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Origen</th><th>Valor</th><th>Página oficial</th></tr></thead>
-            <tbody id="tablaResultados"></tbody>
-          </table>
-        </div>
       </div>
     </section>
 
@@ -439,8 +384,67 @@
             <tbody id="tablaContratos"></tbody>
           </table>
         </div>
-        <button id="btnMas" class="boton-secundario boton-mas">Ver 100 más</button>
+        <div class="acciones centrado"><button id="btnMas" class="boton-secundario">Ver 100 más</button><button id="btnTodos" class="boton-secundario">Ver todos (hasta 5.000)</button></div>
         <p class="info-busqueda" id="notaExcel">El Excel descarga hasta 50.000 contratos con los filtros que tengas puestos.</p>
+      </div>
+    </section>
+
+    <!-- ===== PESTAÑA: BARRANCA EN DATOS ===== -->
+    <section class="pestana" data-tab="datos">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Barranca en datos</h2>
+          <p>Las cifras oficiales que más usamos en la ciudad, en un solo lugar y comparadas con Santander y Colombia. Cada dato dice de dónde sale.</p>
+        </div>
+        <div class="kpis" id="kpisDatos"></div>
+      </div>
+      <div class="graficos">
+        <article class="vidrio tarjeta-grafico">
+          <h2>Sisbén IV: personas por grupo (%)</h2>
+          <div class="lienzo"><canvas id="gSisben"></canvas></div>
+          <p class="nota-pequena" id="notaSisben"></p>
+        </article>
+        <article class="vidrio tarjeta-grafico">
+          <h2>Desempeño de la Alcaldía (Medición de Desempeño Municipal, DNP)</h2>
+          <div class="lienzo"><canvas id="gMdm"></canvas></div>
+          <p class="nota-pequena">Puntaje de 0 a 100. Compara Barrancabermeja con Bucaramanga. Fuente: DNP, datos.gov.co (nkjx-rsq7).</p>
+        </article>
+        <article class="vidrio tarjeta-grafico ancho">
+          <h2>Empresas registradas en la Cámara de Comercio de Barrancabermeja</h2>
+          <div class="detalle-columnas">
+            <div class="lienzo"><canvas id="gEmpresas"></canvas></div>
+            <div><h3>Actividades más comunes</h3><ol id="listaSectores" class="lista-sectores"></ol></div>
+          </div>
+          <p class="nota-pequena">Pequeñas y medianas empresas. Fuente: Cámara de Comercio de Barrancabermeja, datos.gov.co (ryfe-5k95).</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===== PESTAÑA: CANDIDATOS ===== -->
+    <section class="pestana" data-tab="candidatos">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Candidatos y contratos: elecciones territoriales 2019</h2>
+          <p>Todos los candidatos de Barrancabermeja a Alcaldía, Concejo y JAL que reportaron ingresos en Cuentas Claras, cuánto reportaron, y si ellos o quienes financiaron su campaña tienen contratos con entidades del Distrito. Mismo trato para todos los partidos.</p>
+        </div>
+        <div class="kpis" id="kpisCandidatos"></div>
+        <div class="filtros-candidatos">
+          <input type="search" id="buscarCandidato" placeholder="Buscar candidato o partido…">
+          <select id="filtroCargo"><option value="">Todos los cargos</option><option>Alcaldía</option><option>Concejo</option><option>Junta Administradora Local</option></select>
+          <select id="filtroCruce">
+            <option value="">Todos</option>
+            <option value="contratos">Solo candidatos con contratos</option>
+            <option value="financiadores">Solo con financiadores contratistas</option>
+          </select>
+        </div>
+        <p class="nota-pequena" id="contadorCandidatos"></p>
+        <div class="tabla-contenedor">
+          <table>
+            <thead><tr><th>Candidato</th><th>Cargo</th><th>Partido o movimiento</th><th>Ingresos reportados</th><th>Contratos del candidato</th><th>Financiadores con contratos</th></tr></thead>
+            <tbody id="tablaCandidatos"></tbody>
+          </table>
+        </div>
+        <p class="nota-pequena">Fuente: Consejo Nacional Electoral, Cuentas Claras 2019 (datos.gov.co, jgra-rz2t) cruzado con SECOP II por número de documento, sin publicarlo. Tener contratos con el Estado no es ilegal ni irregular por sí mismo. Las elecciones de 2023 no están publicadas como datos abiertos; se agregarán cuando lo estén.</p>
       </div>
     </section>
 
@@ -472,6 +476,12 @@
     <p>Transparencia Barrancabermeja · Iniciativa ciudadana de control social · No es una página oficial · Datos abiertos de SECOP I y SECOP II (Colombia Compra Eficiente)</p>
   </footer>
 
+  <!-- ===== DETALLE DEL CANDIDATO ===== -->
+  <dialog id="candidato" class="vidrio perfil">
+    <button class="cerrar" id="btnCerrarCandidato" aria-label="Cerrar">✕</button>
+    <div id="candidatoContenido"></div>
+  </dialog>
+
   <!-- ===== PERFIL DEL CONTRATISTA ===== -->
   <dialog id="perfil" class="vidrio perfil">
     <button class="cerrar" id="btnCerrarPerfil" aria-label="Cerrar">✕</button>
@@ -484,6 +494,8 @@
     <div id="fichaContenido"></div>
   </dialog>
 
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <script src="app.js" defer></script>
 </body>

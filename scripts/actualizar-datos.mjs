@@ -14,7 +14,7 @@
    correrlo a mano con:  node scripts/actualizar-datos.mjs
    ========================================================= */
 
-import { writeFile, mkdir } from "node:fs/promises";
+import { writeFile, mkdir, rm } from "node:fs/promises";
 
 const API_CONTRATOS = "https://www.datos.gov.co/resource/jbjy-vk9h.json";
 const API_PROCESOS = "https://www.datos.gov.co/resource/p6dx-8zbt.json";
@@ -181,26 +181,187 @@ async function resumenSecretarias() {
       anios: Object.entries(u.anios).sort((a, b) => a[0].localeCompare(b[0])),
       contratistas: [...u.contratistas.values()].sort((a, b) => b.v - a.v).slice(0, 15),
       mayores: [...u.contratos].sort((a, b) => b.v - a.v).slice(0, 15),
-      recientes: [...u.contratos].sort((a, b) => b.f.localeCompare(a.f)).slice(0, 15)
+      recientes: [...u.contratos].sort((a, b) => b.f.localeCompare(a.f)).slice(0, 15),
+      // Lista completa (va en un archivo aparte por secretaría; sin enlace para que pese menos)
+      todos: [...u.contratos].sort((a, b) => b.f.localeCompare(a.f)).map(({ u: _enlace, ...resto }) => resto)
     };
   }).sort((a, b) => b.v - a.v);
 
   return { total: contratos.length, sinUnidad, unidades: lista };
 }
 
+// ---------- 4. Barranca en datos (Sisbén, desempeño, empresas, votación) ----------
+
+const API = id => `https://www.datos.gov.co/resource/${id}.json`;
+const COD_BARRANCA = "68081", COD_BUCARAMANGA = "68001";
+
+async function barrancaEnDatos() {
+  // Sisbén IV (DNP): personas estimadas con el factor de expansión, por grupo
+  const sisben = {};
+  const zonas = { barranca: `cod_mpio = '${COD_BARRANCA}'`, bucaramanga: `cod_mpio = '${COD_BUCARAMANGA}'`,
+                  santander: `starts_with(cod_mpio, '68')`, colombia: "1 = 1" };
+  for (const [zona, cond] of Object.entries(zonas)) {
+    console.log("  Sisbén", zona);
+    const filas = await consultar(API("hq2v-5umk"), { $select: "grupo, sum(fex) as p", $where: cond, $group: "grupo", $order: "grupo" });
+    sisben[zona] = Object.fromEntries(filas.map(f => [f.grupo, Math.round(Number(f.p))]));
+  }
+  const corte = (await consultar(API("hq2v-5umk"), { $select: "corte", $group: "corte" })).map(c => c.corte);
+
+  // Medición de Desempeño Municipal (DNP)
+  console.log("  Desempeño municipal");
+  const mdm = await consultar(API("nkjx-rsq7"), {
+    $select: "codigo_entidad, entidad, anio, indicador, dato",
+    $where: `codigo_entidad in ('${COD_BARRANCA}','${COD_BUCARAMANGA}') AND indicador in ('MDM','Componente de gestión','Componente de resultados')`,
+    $order: "anio", $limit: 500
+  });
+
+  // Empresas registradas en la Cámara de Comercio de Barrancabermeja (pymes)
+  console.log("  Empresas");
+  const tamanos = await consultar(API("ryfe-5k95"), { $select: "tam_empresa as k, count(*) as n", $group: "tam_empresa" });
+  const sectores = await consultar(API("ryfe-5k95"), { $select: "ciiu_1 as k, count(*) as n", $group: "ciiu_1", $order: "n DESC", $limit: 10 });
+
+  // Puestos de votación de las elecciones territoriales 2023
+  console.log("  Puestos de votación");
+  const puestos = await consultar(API("mv2e-prx5"), {
+    $select: "puesto, comuna, direccion, latitud, longitud", $where: "municipio = 'BARRANCABERMEJA'", $limit: 500
+  });
+
+  return { sisben, corteSisben: corte, mdm, empresas: { tamanos, sectores }, puestos };
+}
+
+// ---------- 5. Candidatos 2019 (Cuentas Claras) y su cruce con SECOP ----------
+
+// Dígito de verificación del NIT (método oficial de la DIAN)
+function digitoVerificacion(nit) {
+  const pesos = [3, 7, 13, 17, 19, 23, 29, 37, 41, 43, 47, 53, 59, 67, 71];
+  const d = String(nit).split("").reverse();
+  const suma = d.reduce((s, x, i) => s + Number(x) * pesos[i], 0);
+  const r = suma % 11;
+  return r > 1 ? 11 - r : r;
+}
+
+// Busca en SECOP II los contratos (con entidades de Barrancabermeja) de una lista de documentos
+async function contratosPorDocumento(documentos) {
+  const variantes = new Map(); // variante del documento → documento original
+  for (const doc of documentos) {
+    const limpio = String(doc).replace(/\D/g, "");
+    if (limpio.length < 5) continue;
+    variantes.set(limpio, doc);
+    if (limpio.length === 9 && /^[89]/.test(limpio)) variantes.set(limpio + digitoVerificacion(limpio), doc);
+  }
+  const resultado = {};
+  const lista = [...variantes.keys()];
+  for (let i = 0; i < lista.length; i += 80) {
+    const lote = lista.slice(i, i + 80);
+    const filas = await consultar(API_CONTRATOS, {
+      $select: "documento_proveedor as d, count(id_contrato) as n, sum(valor_del_contrato) as v, min(fecha_de_firma) as desde, max(fecha_de_firma) as hasta",
+      $where: `${BASE} AND documento_proveedor in (${lote.map(literal).join(",")})`,
+      $group: "documento_proveedor"
+    });
+    for (const f of filas) {
+      const original = variantes.get(f.d);
+      const r = resultado[original] || { n: 0, v: 0, desde: f.desde, hasta: f.hasta };
+      r.n += Number(f.n); r.v += Number(f.v);
+      if (f.desde < r.desde) r.desde = f.desde;
+      if (f.hasta > r.hasta) r.hasta = f.hasta;
+      resultado[original] = r;
+    }
+  }
+  return resultado;
+}
+
+async function candidatos2019() {
+  console.log("  Descargando Cuentas Claras 2019 de Barrancabermeja…");
+  const filas = await descargarTodo(API("jgra-rz2t"), {
+    $select: "can_identificacion, nombre_candidato, cnd_nombre, org_nombre, nombre_persona, tpe_nombre, ing_identificacion, ing_valor, tdo_nombre",
+    $where: "mun_nombre = 'BARRANCABERMEJA'"
+  });
+  console.log(`  ${filas.length} aportes`);
+
+  const candidatos = new Map();
+  for (const f of filas) {
+    const id = f.can_identificacion;
+    if (!candidatos.has(id)) candidatos.set(id, { id, nombre: f.nombre_candidato, cargo: f.cnd_nombre, partido: f.org_nombre, n: 0, v: 0, aportantes: new Map() });
+    const c = candidatos.get(id);
+    const valor = (Number(f.ing_valor) || 0) / 100; // Cuentas Claras publica el valor en centavos
+    c.n++; c.v += valor;
+    if (f.ing_identificacion && f.ing_identificacion !== id && f.ing_identificacion !== "NO APLICA") {
+      const a = c.aportantes.get(f.ing_identificacion) || { doc: f.ing_identificacion, nombre: f.nombre_persona, tipo: f.tpe_nombre, v: 0 };
+      a.v += valor;
+      c.aportantes.set(f.ing_identificacion, a);
+    }
+  }
+
+  console.log("  Cruzando candidatos y financiadores con SECOP…");
+  const docsCandidatos = [...candidatos.keys()];
+  const docsAportantes = [...new Set([...candidatos.values()].flatMap(c => [...c.aportantes.keys()]))];
+  const [contratosCandidatos, contratosAportantes] = [await contratosPorDocumento(docsCandidatos), await contratosPorDocumento(docsAportantes)];
+
+  // Lista de contratos de cada candidato que tiene contratos
+  const listas = {};
+  const conContratos = Object.keys(contratosCandidatos);
+  const variantes = new Map();
+  for (const doc of conContratos) {
+    variantes.set(doc, doc);
+    if (doc.length === 9 && /^[89]/.test(doc)) variantes.set(doc + digitoVerificacion(doc), doc);
+  }
+  const todasVariantes = [...variantes.keys()];
+  for (let i = 0; i < todasVariantes.length; i += 60) {
+    const lote = todasVariantes.slice(i, i + 60);
+    const filas = await descargarTodo(API_CONTRATOS, {
+      $select: "id_contrato, referencia_del_contrato, nombre_entidad, valor_del_contrato, fecha_de_firma, estado_contrato, objeto_del_contrato, documento_proveedor",
+      $where: `${BASE} AND documento_proveedor in (${lote.map(literal).join(",")})`
+    });
+    for (const f of filas) {
+      const original = variantes.get(f.documento_proveedor);
+      (listas[original] ||= []).push({
+        id: f.id_contrato, ref: f.referencia_del_contrato || f.id_contrato, ent: f.nombre_entidad,
+        v: Number(f.valor_del_contrato) || 0, f: (f.fecha_de_firma || "").slice(0, 10),
+        est: f.estado_contrato || "", obj: (f.objeto_del_contrato || "").slice(0, 140)
+      });
+    }
+  }
+  Object.values(listas).forEach(l => l.sort((a, b) => b.f.localeCompare(a.f)));
+
+  // Se publica SIN números de cédula ni NIT
+  return [...candidatos.values()].map(c => ({
+    nombre: c.nombre, cargo: c.cargo, partido: c.partido,
+    aportes: c.n, ingresos: Math.round(c.v),
+    contratos: contratosCandidatos[c.id] || null,
+    listaContratos: listas[c.id] || [],
+    financiadoresContratistas: [...c.aportantes.values()]
+      .filter(a => contratosAportantes[a.doc])
+      .map(a => ({ nombre: a.nombre, tipo: a.tipo, aporte: Math.round(a.v), contratos: contratosAportantes[a.doc] }))
+      .sort((x, y) => y.contratos.v - x.contratos.v)
+  })).sort((a, b) => b.ingresos - a.ingresos);
+}
+
 // ---------- Ejecutar todo ----------
 
-console.log("1/3 Resumen del tablero");
+console.log("1/5 Resumen del tablero");
 const tablero = await resumenTablero();
-console.log("2/3 Alertas");
+console.log("2/5 Alertas");
 const alertas = await resumenAlertas();
-console.log("3/3 Secretarías de la Alcaldía");
+console.log("3/5 Secretarías de la Alcaldía");
 const secretarias = await resumenSecretarias();
+console.log("4/5 Barranca en datos");
+const barranca = await barrancaEnDatos();
+console.log("5/5 Candidatos 2019");
+const candidatos = await candidatos2019();
 
 await mkdir("datos", { recursive: true });
 const fecha = Date.now();
 // El resumen principal va liviano para que la página cargue rapidísimo;
 // las secretarías van aparte y solo se descargan al abrir esa pestaña.
 await writeFile("datos/resumen.json", JSON.stringify({ fecha, tablero, alertas }));
+// Cada secretaría tiene su archivo con TODOS sus contratos (se descarga solo al abrirla)
+await rm("datos/secretarias", { recursive: true, force: true });
+await mkdir("datos/secretarias", { recursive: true });
+for (const [i, u] of secretarias.unidades.entries()) {
+  await writeFile(`datos/secretarias/${i}.json`, JSON.stringify(u.todos));
+  delete u.todos;
+}
 await writeFile("datos/secretarias.json", JSON.stringify({ fecha, ...secretarias }));
+await writeFile("datos/barranca.json", JSON.stringify({ fecha, ...barranca }));
+await writeFile("datos/candidatos.json", JSON.stringify({ fecha, eleccion: "Elecciones territoriales 2019", candidatos }));
 console.log("Listo: datos/resumen.json");
