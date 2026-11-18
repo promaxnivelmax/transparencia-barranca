@@ -4,8 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Transparencia Barrancabermeja · Observatorio ciudadano de contratación</title>
-  <meta name="description" content="Observatorio ciudadano de la contratación pública de Barrancabermeja con datos abiertos de SECOP II. Creado por Iván Rodríguez, Edil de la Comuna 5.">
+  <meta name="description" content="Observatorio ciudadano de la contratación pública de Barrancabermeja con datos abiertos de SECOP I y SECOP II. Creado por Iván Rodríguez, Edil de la Comuna 5.">
   <meta name="author" content="Iván Rodríguez, Edil de la Comuna 5 de Barrancabermeja">
+  <meta property="og:title" content="Transparencia Barrancabermeja">
+  <meta property="og:description" content="Busca contratos públicos de Barrancabermeja por nombre, cédula, NIT o número de contrato. Creado por Iván Rodríguez, Edil de la Comuna 5.">
   <link rel="stylesheet" href="estilos.css">
 </head>
 <body>
@@ -13,7 +15,7 @@
     <span class="mancha m1"></span><span class="mancha m2"></span><span class="mancha m3"></span>
   </div>
 
-  <!-- ===== ENCABEZADO Y MENÚ ===== -->
+  <!-- ===== ENCABEZADO Y PESTAÑAS ===== -->
   <header class="cabecera vidrio">
     <div class="marca">
       <span class="logo">◆</span>
@@ -22,33 +24,60 @@
         <small>Por Iván Rodríguez · Edil de la Comuna 5</small>
       </div>
     </div>
-    <nav class="menu">
-      <a href="#panel">Panel</a>
-      <a href="#graficos">Gráficos</a>
-      <a href="#entidades">Entidades</a>
-      <a href="#contratistas">Contratistas</a>
-      <a href="#contratos">Contratos</a>
-      <a href="#metodologia">Metodología</a>
+    <nav class="menu" id="menu" aria-label="Secciones">
+      <button class="pestana-btn activa" data-tab="inicio">Inicio</button>
+      <button class="pestana-btn" data-tab="buscar">Buscar en SECOP</button>
+      <button class="pestana-btn" data-tab="alertas">Alertas</button>
+      <button class="pestana-btn" data-tab="entidades">Entidades</button>
+      <button class="pestana-btn" data-tab="secretarias">Secretarías</button>
+      <button class="pestana-btn" data-tab="contratistas">Contratistas</button>
+      <button class="pestana-btn" data-tab="contratos">Contratos</button>
+      <button class="pestana-btn" data-tab="metodologia">Metodología</button>
     </nav>
   </header>
 
   <main>
-    <!-- ===== PRESENTACIÓN ===== -->
-    <section class="intro">
-      <h1>¿Cómo se contrata en Barrancabermeja?</h1>
-      <p>Consulta quién contrata, con quién, cuánto dinero se compromete y en qué estado están los contratos públicos del Distrito.</p>
-      <div class="controles-anio">
-        <label for="anio">Año de firma:</label>
-        <select id="anio"></select>
-        <span id="estadoCarga" class="estado-carga">Preparando…</span>
+    <!-- ===== PRESENTACIÓN CON SILUETA DE BARRANCABERMEJA ===== -->
+    <section class="intro vidrio">
+      <div class="intro-texto">
+        <p class="sobretitulo">Capital petrolera de Colombia · Orillas del Magdalena</p>
+        <h1>¿Cómo se contrata en Barrancabermeja?</h1>
+        <p>Quién contrata, con quién, cuánto dinero se compromete y en qué estado van los contratos públicos del Distrito.</p>
+        <p class="gancho">¿Se te complica buscar en SECOP? <button class="enlace" data-ir="buscar">Búscalo aquí</button> por nombre, cédula, NIT o número de contrato.</p>
+        <div class="controles-anio">
+          <label for="anio">Periodo:</label>
+          <select id="anio"></select>
+          <span id="estadoCarga" class="estado-carga">Preparando…</span>
+        </div>
+        <p class="autor">Creado por <strong>Iván Rodríguez</strong>, Edil de la Comuna 5 de Barrancabermeja</p>
       </div>
-      <p class="autor">Creado por <strong>Iván Rodríguez</strong>, Edil de la Comuna 5 de Barrancabermeja</p>
-      <p class="aviso">Iniciativa ciudadana ·No es una página oficial de la Alcaldía ni de Colombia Compra Eficiente · Fuente: SECOP II (datos.gov.co)</p>
+      <svg class="silueta" viewBox="0 0 400 200" aria-hidden="true">
+        <defs>
+          <linearGradient id="solG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f5b915"/><stop offset="1" stop-color="#fb923c"/>
+          </linearGradient>
+          <linearGradient id="rioG" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#38bdf8" stop-opacity="0.15"/><stop offset="0.5" stop-color="#38bdf8" stop-opacity="0.5"/><stop offset="1" stop-color="#38bdf8" stop-opacity="0.15"/>
+          </linearGradient>
+        </defs>
+        <circle cx="300" cy="78" r="38" fill="url(#solG)" opacity="0.9"/>
+        <g fill="rgba(255,255,255,0.82)">
+          <rect x="40" y="70" width="10" height="80"/><rect x="58" y="90" width="8" height="60"/>
+          <rect x="78" y="105" width="44" height="45" rx="3"/><rect x="132" y="50" width="12" height="100"/>
+          <rect x="152" y="80" width="9" height="70"/><rect x="170" y="112" width="60" height="38" rx="3"/>
+          <rect x="240" y="95" width="11" height="55"/><rect x="262" y="120" width="70" height="30" rx="3"/>
+          <rect x="342" y="85" width="9" height="65"/>
+          <circle cx="100" cy="105" r="16"/><circle cx="200" cy="112" r="20"/>
+        </g>
+        <g fill="#f5b915"><circle cx="45" cy="64" r="3"/><circle cx="138" cy="44" r="3"/><circle cx="346" cy="79" r="3"/></g>
+        <path d="M0 160 Q50 150 100 160 T200 160 T300 160 T400 160 V200 H0Z" fill="url(#rioG)"/>
+        <path d="M0 178 Q50 170 100 178 T200 178 T300 178 T400 178" stroke="rgba(56,189,248,0.6)" stroke-width="2" fill="none"/>
+      </svg>
     </section>
 
-    <!-- ===== FILTROS (afectan todo el tablero) ===== -->
-    <section class="filtros vidrio" aria-label="Filtros">
-      <input type="search" id="buscador" placeholder="Buscar contratista, entidad, objeto o número de contrato…">
+    <!-- ===== FILTROS (afectan el tablero) ===== -->
+    <section class="filtros vidrio" id="barraFiltros" aria-label="Filtros">
+      <input type="search" id="buscador" placeholder="Filtrar por contratista, entidad, objeto o número…">
       <select id="filtroEntidad"><option value="">Todas las entidades</option></select>
       <select id="filtroModalidad"><option value="">Todas las modalidades</option></select>
       <select id="filtroEstado"><option value="">Todos los estados</option></select>
@@ -57,114 +86,191 @@
         <option value="Empresa">Solo empresas</option>
         <option value="Persona natural">Solo personas naturales</option>
       </select>
-      <button id="btnLimpiar" class="boton-secundario">Limpiar filtros</button>
-    </section>
-
-    <!-- ===== MÓDULO 1: PANEL GENERAL ===== -->
-    <section id="panel" class="kpis">
-      <article class="kpi vidrio"><span>Contratos</span><strong id="kpiContratos">…</strong><small id="kpiContratosNota"></small></article>
-      <article class="kpi vidrio"><span>Valor contratado</span><strong id="kpiValor">…</strong><small id="kpiValorNota"></small></article>
-      <article class="kpi vidrio alerta"><span>Contratación directa</span><strong id="kpiDirecta">…</strong><small id="kpiDirectaNota"></small></article>
-      <article class="kpi vidrio"><span>Contratistas distintos</span><strong id="kpiContratistas">…</strong><small id="kpiContratistasNota"></small></article>
-      <article class="kpi vidrio positivo"><span>En ejecución</span><strong id="kpiEjecucion">…</strong><small id="kpiEjecucionNota"></small></article>
-      <article class="kpi vidrio alerta"><span>Concentración</span><strong id="kpiConcentracion">…</strong><small>del valor lo reciben los 10 contratistas más grandes</small></article>
-    </section>
-
-    <!-- ===== MÓDULO 8: GRÁFICOS ===== -->
-    <section id="graficos" class="graficos">
-      <article class="vidrio tarjeta-grafico ancho">
-        <h2>Entidades que más contratan</h2>
-        <div class="lienzo alto"><canvas id="gEntidades"></canvas></div>
-      </article>
-      <article class="vidrio tarjeta-grafico">
-        <h2>Contratación mes a mes</h2>
-        <div class="lienzo"><canvas id="gMeses"></canvas></div>
-      </article>
-      <article class="vidrio tarjeta-grafico">
-        <h2>Modalidad de contratación</h2>
-        <div class="lienzo"><canvas id="gModalidad"></canvas></div>
-      </article>
-      <article class="vidrio tarjeta-grafico">
-        <h2>Empresas frente a personas naturales (valor)</h2>
-        <div class="lienzo"><canvas id="gTipo"></canvas></div>
-      </article>
-      <article class="vidrio tarjeta-grafico">
-        <h2>Estado reportado en SECOP</h2>
-        <div class="lienzo"><canvas id="gEstados"></canvas></div>
-      </article>
-    </section>
-
-    <!-- ===== MÓDULO 2: ENTIDADES ===== -->
-    <section id="entidades" class="vidrio bloque">
-      <div class="bloque-titulo">
-        <h2>Contratación por entidad</h2>
-        <p>Haz clic en una entidad para ver solo sus contratos.</p>
-      </div>
-      <div class="tabla-contenedor">
-        <table>
-          <thead><tr><th>Entidad</th><th>Contratos</th><th>Valor</th><th>En ejecución</th><th>% directa</th></tr></thead>
-          <tbody id="tablaEntidades"></tbody>
-        </table>
+      <button id="btnLimpiar" class="boton-secundario">Limpiar</button>
+      <div id="vistaEspecial" class="vista-especial" hidden>
+        <span id="vistaEspecialTexto"></span>
+        <button id="btnQuitarVista" class="boton-secundario">Quitar ✕</button>
       </div>
     </section>
 
-    <!-- ===== MÓDULOS 4 Y 5: CONTRATISTAS ===== -->
-    <section id="contratistas" class="vidrio bloque">
-      <div class="bloque-titulo">
-        <h2>Contratistas con más recursos</h2>
-        <p>Los 25 contratistas que más valor suman. Haz clic en un nombre para ver su historial.</p>
+    <!-- ===== PESTAÑA: INICIO (indicadores + gráficos) ===== -->
+    <section class="pestana activa" data-tab="inicio">
+      <div class="kpis">
+        <article class="kpi vidrio"><span>Contratos</span><strong id="kpiContratos">…</strong><small id="kpiContratosNota"></small></article>
+        <article class="kpi vidrio"><span>Valor contratado</span><strong id="kpiValor">…</strong><small id="kpiValorNota"></small></article>
+        <article class="kpi vidrio alerta"><span>Contratación directa</span><strong id="kpiDirecta">…</strong><small id="kpiDirectaNota"></small></article>
+        <article class="kpi vidrio"><span>Contratistas distintos</span><strong id="kpiContratistas">…</strong><small id="kpiContratistasNota"></small></article>
+        <article class="kpi vidrio positivo"><span>En ejecución</span><strong id="kpiEjecucion">…</strong><small id="kpiEjecucionNota"></small></article>
+        <article class="kpi vidrio alerta"><span>Concentración</span><strong id="kpiConcentracion">…</strong><small>del valor va a los 10 contratistas más grandes</small></article>
+        <article class="kpi vidrio positivo"><span>Pagos reportados</span><strong id="kpiPagado">…</strong><small id="kpiPagadoNota"></small></article>
+        <article class="kpi vidrio"><span>Alertas activas</span><strong id="kpiAlertas">…</strong><small><button class="enlace" data-ir="alertas">Ver señales para revisar</button></small></article>
       </div>
-      <div class="tabla-contenedor">
-        <table>
-          <thead><tr><th>#</th><th>Contratista</th><th>Tipo</th><th>Contratos</th><th>Entidades</th><th>Valor</th><th>% del total</th></tr></thead>
-          <tbody id="tablaContratistas"></tbody>
-        </table>
+
+      <div class="graficos">
+        <article class="vidrio tarjeta-grafico ancho">
+          <h2>Entidades que más contratan</h2>
+          <div class="lienzo alto"><canvas id="gEntidades"></canvas></div>
+        </article>
+        <article class="vidrio tarjeta-grafico">
+          <h2 id="tituloTiempo">Contratación por año</h2>
+          <div class="lienzo"><canvas id="gMeses"></canvas></div>
+        </article>
+        <article class="vidrio tarjeta-grafico">
+          <h2>Modalidad de contratación</h2>
+          <div class="lienzo"><canvas id="gModalidad"></canvas></div>
+        </article>
+        <article class="vidrio tarjeta-grafico">
+          <h2>Empresas frente a personas naturales (valor)</h2>
+          <div class="lienzo"><canvas id="gTipo"></canvas></div>
+        </article>
+        <article class="vidrio tarjeta-grafico">
+          <h2>Tipo de contrato (valor)</h2>
+          <div class="lienzo"><canvas id="gTipoContrato"></canvas></div>
+        </article>
+        <article class="vidrio tarjeta-grafico ancho">
+          <h2>Estado reportado en SECOP</h2>
+          <div class="lienzo"><canvas id="gEstados"></canvas></div>
+        </article>
       </div>
     </section>
 
-    <!-- ===== MÓDULO 6: CONSULTA DE CONTRATOS ===== -->
-    <section id="contratos" class="vidrio bloque">
-      <div class="bloque-titulo">
-        <h2>Consulta de contratos</h2>
-        <p id="contador">…</p>
+    <!-- ===== PESTAÑA: BUSCAR EN SECOP I Y II (todos los años) ===== -->
+    <section class="pestana" data-tab="buscar">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Buscador de contratos en SECOP I y SECOP II</h2>
+          <p>Busca en todos los años, directamente en la base oficial de Colombia Compra Eficiente.</p>
+        </div>
+        <form id="formBuscar" class="form-buscar">
+          <select id="tipoBusqueda" aria-label="Buscar por">
+            <option value="nombre">Nombre o razón social</option>
+            <option value="documento">Cédula o NIT</option>
+            <option value="contrato">Número de contrato</option>
+            <option value="objeto">Palabra en el objeto</option>
+          </select>
+          <input type="search" id="textoBusqueda" placeholder="Ej: Aseos y Servicios de Colombia" required>
+          <select id="alcanceBusqueda" aria-label="Dónde buscar">
+            <option value="barranca">Solo entidades de Barrancabermeja</option>
+            <option value="colombia">Toda Colombia</option>
+          </select>
+          <button type="submit" id="btnBuscar">Buscar</button>
+        </form>
+        <p id="resultadoBusquedaInfo" class="info-busqueda">Consejo: escribe el nombre con y sin tildes, o solo los apellidos. Si el contrato lo firmó una entidad de otro municipio (por ejemplo, la Gobernación), escoge «Toda Colombia».</p>
+        <div class="resumen-busqueda" id="resumenBusqueda" hidden></div>
+        <div class="tabla-contenedor" id="contenedorResultados" hidden>
+          <table>
+            <thead><tr><th>Firma</th><th>Contrato</th><th>Entidad</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Origen</th><th>Valor</th></tr></thead>
+            <tbody id="tablaResultados"></tbody>
+          </table>
+        </div>
       </div>
-      <div class="acciones">
-        <button id="btnExcel">Descargar Excel</button>
-        <button id="btnImprimir" class="boton-secundario">Imprimir / PDF</button>
-      </div>
-      <div class="tabla-contenedor">
-        <table>
-          <thead><tr><th>Firma</th><th>Contrato</th><th>Entidad</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Valor</th></tr></thead>
-          <tbody id="tablaContratos"></tbody>
-        </table>
-      </div>
-      <button id="btnMas" class="boton-secundario boton-mas">Ver 100 más</button>
     </section>
 
-    <!-- ===== METODOLOGÍA Y LIMITACIONES ===== -->
-    <section id="metodologia" class="vidrio bloque texto">
-      <h2>Metodología y limitaciones</h2>
-      <ul>
-        <li><strong>Fuente:</strong> conjunto “SECOP II – Contratos electrónicos” (jbjy-vk9h) de datos.gov.co. Los datos se consultan en vivo cada vez que se abre la página.</li>
-        <li><strong>Qué entidades se incluyen:</strong> las que SECOP registra con ciudad “Barrancabermeja”, más la Alcaldía Distrital (NIT 890201900), que SECOP registra con ciudad “No Definido”. Puede haber otras entidades del Distrito registradas sin ciudad que todavía no estén incluidas.</li>
-        <li><strong>Solo SECOP II:</strong> los contratos que solo estén en SECOP I o en la Tienda Virtual del Estado no aparecen aquí.</li>
-        <li><strong>Duplicados:</strong> cada contrato se cuenta una sola vez, usando su identificador único de SECOP (<code>id_contrato</code>).</li>
-        <li><strong>Estado:</strong> se muestra el estado tal como lo reporta la entidad en SECOP. “Modificado” significa que el contrato tuvo cambios; no indica si está en ejecución o terminado, por eso se muestra aparte. No se asume que un contrato terminó solo porque pasó su fecha final.</li>
-        <li><strong>Empresas y personas:</strong> se clasifican por el tipo de documento del contratista: NIT = empresa; cédula, cédula de extranjería, pasaporte o permiso de protección = persona natural.</li>
-        <li><strong>Valores:</strong> se usa el valor del contrato reportado en SECOP. Las adiciones en dinero no siempre se reportan de forma completa en este conjunto de datos, así que las cifras son indicativas y no definitivas.</li>
-        <li><strong>Datos personales:</strong> esta página no descarga ni muestra cédulas, direcciones, teléfonos ni datos bancarios.</li>
-        <li><strong>Secretarías y dependencias:</strong> SECOP no informa a qué secretaría de la Alcaldía pertenece cada contrato, así que por ahora no se muestra esa división. No se inventan asignaciones.</li>
-      </ul>
-      <p class="actualizacion" id="actualizacion"></p>
+    <!-- ===== PESTAÑA: ALERTAS ===== -->
+    <section class="pestana" data-tab="alertas">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Señales para revisar</h2>
+          <p>No son irregularidades: son casos que vale la pena mirar con lupa. Haz clic en una tarjeta para ver sus contratos.</p>
+        </div>
+        <div id="listaAlertas" class="alertas"></div>
+      </div>
+    </section>
+
+    <!-- ===== PESTAÑA: ENTIDADES ===== -->
+    <section class="pestana" data-tab="entidades">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Contratación por entidad</h2>
+          <p>Haz clic en una entidad para ver solo sus contratos.</p>
+        </div>
+        <div id="tarjetasEntidades" class="tarjetas-entidades"></div>
+      </div>
+    </section>
+
+    <!-- ===== PESTAÑA: SECRETARÍAS DE LA ALCALDÍA ===== -->
+    <section class="pestana" data-tab="secretarias">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Contratación por secretaría y dependencia de la Alcaldía</h2>
+          <p id="notaSecretarias">Cada secretaría contrata en SECOP con su propia unidad de contratación. Haz clic en una para ver con quién contrata y sus contratos más grandes. Todos los años.</p>
+        </div>
+        <div id="tarjetasSecretarias" class="tarjetas-entidades"><p>Cargando…</p></div>
+      </div>
+      <div id="detalleSecretaria" class="vidrio bloque" hidden></div>
+    </section>
+
+    <!-- ===== PESTAÑA: CONTRATISTAS ===== -->
+    <section class="pestana" data-tab="contratistas">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Contratistas con más recursos</h2>
+          <p>Los 50 contratistas que más valor suman. Haz clic en un nombre para ver su historial.</p>
+        </div>
+        <div class="tabla-contenedor">
+          <table>
+            <thead><tr><th>#</th><th>Contratista</th><th>Tipo</th><th>Contratos</th><th>En ejecución</th><th>Entidades</th><th>Valor</th><th>% del total</th></tr></thead>
+            <tbody id="tablaContratistas"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== PESTAÑA: CONTRATOS ===== -->
+    <section class="pestana" data-tab="contratos">
+      <div class="vidrio bloque">
+        <div class="bloque-titulo">
+          <h2>Consulta de contratos</h2>
+          <p id="contador">…</p>
+        </div>
+        <div class="acciones">
+          <button id="btnExcel">Descargar Excel</button>
+          <button id="btnImprimir" class="boton-secundario">Imprimir / PDF</button>
+          <select id="ordenContratos" aria-label="Ordenar">
+            <option value="fecha">Más recientes primero</option>
+            <option value="valor">Mayor valor primero</option>
+          </select>
+        </div>
+        <div class="tabla-contenedor">
+          <table>
+            <thead><tr><th>Firma</th><th>Contrato</th><th>Entidad</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Valor</th></tr></thead>
+            <tbody id="tablaContratos"></tbody>
+          </table>
+        </div>
+        <button id="btnMas" class="boton-secundario boton-mas">Ver 100 más</button>
+        <p class="info-busqueda" id="notaExcel">El Excel descarga hasta 50.000 contratos con los filtros que tengas puestos.</p>
+      </div>
+    </section>
+
+    <!-- ===== PESTAÑA: METODOLOGÍA ===== -->
+    <section class="pestana" data-tab="metodologia">
+      <div class="vidrio bloque texto">
+        <h2>Metodología y limitaciones</h2>
+        <ul>
+          <li><strong>Todo el historial:</strong> por defecto se muestran todos los años disponibles en SECOP II (desde 2017). Las sumas y conteos los calcula directamente SECOP, por eso la página no necesita descargar los miles de contratos y carga rápido. Puedes escoger un año en «Periodo».</li>
+          <li><strong>Fuentes:</strong> el tablero usa «SECOP II – Contratos electrónicos» (jbjy-vk9h). El buscador usa «SECOP Integrado» (rpmr-utcd), que reúne SECOP I y SECOP II. Ambas son publicadas por Colombia Compra Eficiente en datos.gov.co.</li>
+          <li><strong>Qué entidades se incluyen:</strong> las que SECOP registra con ciudad «Barrancabermeja», más la Alcaldía Distrital (NIT 890201900), que SECOP registra con ciudad «No Definido». Puede haber otras entidades del Distrito registradas sin ciudad que todavía no estén incluidas.</li>
+          <li><strong>Contratos de otras entidades en Barrancabermeja:</strong> si una entidad de otro municipio (por ejemplo, la Gobernación o un ministerio) contrata una obra en Barrancabermeja, no aparece en el tablero. Encuéntrala en el buscador con la opción «Toda Colombia».</li>
+          <li><strong>Duplicados:</strong> cada contrato se cuenta una sola vez, usando su identificador único. En el buscador, si un contrato aparece varias veces por modificaciones, se muestra la versión de mayor valor.</li>
+          <li><strong>Estado:</strong> se muestra el estado que reporta la entidad. «Modificado» significa que el contrato tuvo cambios; no indica si está en ejecución o terminado. No se asume que un contrato terminó solo porque pasó su fecha final.</li>
+          <li><strong>Empresas y personas:</strong> se clasifican por el tipo de documento del contratista: NIT = empresa; cédula, cédula de extranjería, pasaporte o permiso de protección = persona natural.</li>
+          <li><strong>Valores y pagos:</strong> se usa el valor y el valor pagado que reporta la entidad. Muchas entidades no actualizan los pagos a tiempo; las cifras son indicativas, no definitivas.</li>
+          <li><strong>Señales para revisar:</strong> son reglas automáticas (por ejemplo, contratación directa de más de $500 millones, o contratos de $10.000 millones o más, que a veces son errores de digitación de la entidad en SECOP). Orientan el control social; no prueban ninguna irregularidad.</li>
+          <li><strong>Datos personales:</strong> la página no muestra cédulas, direcciones, teléfonos ni datos bancarios. El buscador por cédula o NIT solo usa el número que tú escribes, igual que el buscador oficial de SECOP, y nunca lo muestra en los resultados.</li>
+          <li><strong>Secretarías y dependencias:</strong> en SECOP II cada contrato viene de un proceso, y cada proceso dice qué «unidad de contratación» de la Alcaldía lo hizo (por ejemplo, Secretaría de Infraestructura). Se unen los contratos con sus procesos (conjunto p6dx-8zbt) para saber de qué secretaría es cada uno. Cuando una misma dependencia aparece con nombres distintos (por ejemplo, «Secretaría de Salud» y «Secretaría Distrital de Salud»), se agrupa en una sola. Los cambios de nombre por reestructuraciones pueden hacer que una dependencia aparezca separada.</li>
+          <li><strong>Actualización automática:</strong> el resumen de todos los años se recalcula solo todos los días en GitHub; la página lo carga al instante. Cuando usas filtros, la consulta se hace en vivo a SECOP.</li>
+        </ul>
+        <p class="actualizacion" id="actualizacion"></p>
+      </div>
     </section>
   </main>
 
   <footer class="pie">
     <p>Creado por <strong>Iván Rodríguez</strong> · Edil de la Comuna 5 de Barrancabermeja</p>
-    <p>Transparencia Barrancabermeja · Iniciativa ciudadana de control social · Datos abiertos de SECOP II</p>
+    <p>Transparencia Barrancabermeja · Iniciativa ciudadana de control social · No es una página oficial · Datos abiertos de SECOP I y SECOP II (Colombia Compra Eficiente)</p>
   </footer>
 
-  <!-- ===== FICHA DEL CONTRATO (ventana emergente) ===== -->
+  <!-- ===== FICHA DEL CONTRATO ===== -->
   <dialog id="ficha" class="vidrio">
     <button class="cerrar" id="btnCerrarFicha" aria-label="Cerrar">✕</button>
     <div id="fichaContenido"></div>

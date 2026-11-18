@@ -2,96 +2,106 @@
 
 /* =========================================================
    TRANSPARENCIA BARRANCABERMEJA · app.js
-   1. Configuración
-   2. Utilidades
-   3. Descarga de datos (con paginación, reintentos y sin duplicados)
-   4. Filtros
-   5. Indicadores
-   6. Gráficos
-   7. Tablas (entidades, contratistas, contratos)
-   8. Ficha del contrato
-   9. Exportar e imprimir
-   10. Arranque
+   Creado por Iván Rodríguez, Edil de la Comuna 5
+
+   El tablero NO descarga los miles de contratos: le pide a SECOP
+   que haga las sumas y conteos, y solo trae los resultados.
+   Así se puede mostrar TODO el historial y la página sigue rápida.
+
+   1. Configuración          7. Gráficos
+   2. Utilidades             8. Entidades y contratistas
+   3. Memoria (caché)        9. Tabla de contratos
+   4. Filtros → consulta    10. Buscador SECOP I y II
+   5. Carga del tablero     11. Ficha del contrato
+   6. Indicadores y alertas 12. Exportar y arranque
    ========================================================= */
 
 // ===== 1. CONFIGURACIÓN =====
 
-const API = "https://www.datos.gov.co/resource/jbjy-vk9h.json";
+const API_SECOP2 = "https://www.datos.gov.co/resource/jbjy-vk9h.json";   // SECOP II contratos
+const API_INTEGRADO = "https://www.datos.gov.co/resource/rpmr-utcd.json"; // SECOP I + SECOP II
 
-// Entidades del Distrito que SECOP registra SIN ciudad. Se identifican por su NIT.
-// Si encuentras otra entidad en esa situación, agrega su NIT aquí.
+// Entidades del Distrito que SECOP registra SIN ciudad (se identifican por NIT)
 const NITS_EXTRA = [
-  "890201900" // Alcaldía Distrital de Barrancabermeja
+  "890201900",  // Alcaldía Distrital de Barrancabermeja
+  "829001846",  // Empresa Social del Estado (E.S.E.) Barrancabermeja
+  "800024581",  // Instituto Universitario de la Paz (UNIPAZ)
+  "8000160643", // Institución Educativa Diego Hernández de Gallegos
+  "900112222",  // Institución Educativa Los Laureles
+  "829003831"   // Ministerio del Trabajo - Oficina Especial Barrancabermeja
 ];
 
-// Solo pedimos los campos que usamos. Así la descarga es más liviana
-// y NO traemos cédulas, direcciones ni datos bancarios.
+const BASE = `(ciudad = 'Barrancabermeja' OR nit_entidad in (${NITS_EXTRA.map(n => `'${n}'`).join(",")}))`;
+
+// Campos de cada contrato (sin cédulas, direcciones ni datos bancarios)
 const CAMPOS = [
-  "id_contrato", "referencia_del_contrato", "nombre_entidad", "nit_entidad",
-  "proveedor_adjudicado", "tipodocproveedor", "valor_del_contrato",
-  "fecha_de_firma", "fecha_de_inicio_del_contrato", "fecha_de_fin_del_contrato",
-  "objeto_del_contrato", "modalidad_de_contratacion", "tipo_de_contrato",
-  "estado_contrato", "dias_adicionados", "urlproceso"
+  "id_contrato", "referencia_del_contrato", "nombre_entidad", "proveedor_adjudicado",
+  "tipodocproveedor", "valor_del_contrato", "valor_pagado", "fecha_de_firma",
+  "fecha_de_inicio_del_contrato", "fecha_de_fin_del_contrato", "objeto_del_contrato",
+  "modalidad_de_contratacion", "tipo_de_contrato", "estado_contrato", "dias_adicionados"
 ];
 
-const POR_PAGINA = 1000;   // registros por consulta a la API
-const FILAS_TABLA = 100;   // filas que se muestran cada vez en la tabla
+const CAMPOS_INTEGRADO = [
+  "nombre_de_la_entidad", "municipio_entidad", "estado_del_proceso", "modalidad_de_contrataci_n",
+  "objeto_a_contratar", "objeto_del_proceso", "tipo_de_contrato", "fecha_de_firma_del_contrato",
+  "fecha_inicio_ejecuci_n", "fecha_fin_ejecuci_n", "numero_del_contrato", "numero_de_proceso",
+  "valor_contrato", "nom_raz_social_contratista", "url_contrato", "origen", "tipo_documento_proveedor"
+];
 
-// Traducción de los estados que reporta SECOP a categorías claras
+const HORAS_CACHE = 6;
+const HORAS_RESUMEN = 48;     // si el resumen tiene más de 2 días, se consulta en vivo
+const FILAS_TABLA = 100;
+const PRIMER_ANIO = 2017;
+
 const ESTADOS = {
-  "en ejecución": "En ejecución",
-  "en ejecucion": "En ejecución",
-  "aprobado": "Aprobado, sin iniciar",
-  "modificado": "Modificado",
-  "cedido": "Cedido",
-  "suspendido": "Suspendido",
-  "terminado": "Terminado",
-  "cerrado": "Cerrado",
-  "liquidado": "Liquidado"
+  "en ejecución": "En ejecución", "en ejecucion": "En ejecución", "aprobado": "Aprobado, sin iniciar",
+  "modificado": "Modificado", "cedido": "Cedido", "suspendido": "Suspendido",
+  "terminado": "Terminado", "cerrado": "Cerrado", "liquidado": "Liquidado",
+  "celebrado": "Celebrado", "terminado sin liquidar": "Terminado", "terminado anormalmente después de convocado": "Terminado"
 };
+const TERMINADOS = ["Terminado", "Cerrado", "Liquidado"];
+const DOCS_PERSONA = ["Cédula de Ciudadanía", "Cédula de Extranjería", "Pasaporte", "Permiso por Protección Temporal", "Nit de Persona Natural"];
 
-const DOCS_PERSONA = ["Cédula de Ciudadanía", "Cédula de Extranjería", "Pasaporte", "Permiso por Protección Temporal"];
-
-// Estado de la aplicación (todo lo que cambia mientras se usa la página)
 const app = {
-  todos: [],
-  filtrados: [],
-  filasVisibles: FILAS_TABLA,
+  indice: new Map(),       // contratos ya vistos (para abrir su ficha)
+  vista: null,             // alerta seleccionada
   graficos: {},
-  duplicados: 0,
-  consultadoEn: null
+  filas: [],               // contratos mostrados en la tabla
+  totalContratos: 0,
+  resultados: {},          // últimos resultados del tablero
+  alertas: [],
+  memoria: new Map(),      // resultados ya consultados en esta visita
+  resumen: null,           // datos/resumen.json (calculado cada día en GitHub)
+  turno: 0                 // evita pintar resultados viejos si cambias filtros rápido
 };
 
 // ===== 2. UTILIDADES =====
 
 const $ = id => document.getElementById(id);
+const numero = n => Number(n || 0).toLocaleString("es-CO");
+const pesos = v => Number(v || 0).toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+const porcentaje = (parte, total) =>
+  total ? (parte / total * 100).toLocaleString("es-CO", { maximumFractionDigits: 1 }) + " %" : "0 %";
 
-function pesos(valor) {
-  return valor.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-}
-
-// Forma corta y fácil de leer: $ 12,5 mil millones
 function pesosCorto(valor) {
   const f = n => n.toLocaleString("es-CO", { maximumFractionDigits: 1 });
+  valor = Number(valor || 0);
   if (valor >= 1e12) return "$ " + f(valor / 1e12) + " billones";
   if (valor >= 1e9) return "$ " + f(valor / 1e9) + " mil millones";
   if (valor >= 1e6) return "$ " + f(valor / 1e6) + " millones";
   return pesos(valor);
 }
 
-const numero = n => n.toLocaleString("es-CO");
-const porcentaje = (parte, total) => total ? (parte / total * 100).toLocaleString("es-CO", { maximumFractionDigits: 1 }) + " %" : "0 %";
-
-// Seguridad: evita que un texto de los datos se ejecute como código HTML
 function escapar(texto) {
   const div = document.createElement("div");
   div.textContent = texto == null ? "" : String(texto);
   return div.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
-function fecha(texto) {
-  return texto ? texto.slice(0, 10) : "Sin dato";
-}
+const fecha = t => t ? t.slice(0, 10) : "Sin dato";
+const recortar = (t, max = 40) => !t ? "" : t.length > max ? t.slice(0, max) + "…" : t;
+const esperar = ms => new Promise(r => setTimeout(r, ms));
+const hoyISO = (dias = 0) => new Date(Date.now() + dias * 864e5).toISOString().slice(0, 10);
 
 function clasificarEstado(estado) {
   const clave = (estado || "").trim().toLowerCase();
@@ -99,43 +109,35 @@ function clasificarEstado(estado) {
   return ESTADOS[clave] || estado;
 }
 
-function clasificarTipo(tipoDocumento) {
-  if (tipoDocumento === "NIT") return "Empresa";
-  if (DOCS_PERSONA.includes(tipoDocumento)) return "Persona natural";
+function clasificarTipo(doc) {
+  if (doc === "NIT" || doc === "Nit de Persona Jurídica") return "Empresa";
+  if (DOCS_PERSONA.includes(doc)) return "Persona natural";
   return "Sin clasificar";
 }
 
 function claseEstado(estado) {
   if (estado === "En ejecución") return "ejecucion";
-  if (["Terminado", "Cerrado", "Liquidado"].includes(estado)) return "terminado";
+  if (TERMINADOS.includes(estado)) return "terminado";
   if (estado === "Modificado") return "modificado";
   if (["Suspendido", "Sin información"].includes(estado)) return "alerta";
   return "";
 }
 
-// Agrupa una lista por un campo y devuelve { clave: { n, valor } }
-function agrupar(lista, campo) {
-  const grupos = {};
-  lista.forEach(c => {
-    const clave = c[campo] || "Sin dato";
-    if (!grupos[clave]) grupos[clave] = { n: 0, valor: 0 };
-    grupos[clave].n += 1;
-    grupos[clave].valor += c.valor;
-  });
-  return grupos;
+// Texto seguro para usar dentro de una consulta a SECOP
+function textoConsulta(t) {
+  return t.toUpperCase().replace(/['%_\\]/g, " ").replace(/\s+/g, " ").trim();
 }
+// Valor exacto entre comillas para la consulta (duplica las comillas simples)
+const literal = v => `'${String(v).replace(/'/g, "''")}'`;
 
-const esperar = ms => new Promise(r => setTimeout(r, ms));
-
-// ===== 3. DESCARGA DE DATOS =====
-
-// Si la API falla, intenta de nuevo hasta 3 veces
-async function consultarConReintentos(url, intentos = 3) {
+async function consultar(url, intentos = 3) {
   for (let i = 1; i <= intentos; i++) {
     try {
-      const respuesta = await fetch(url);
-      if (!respuesta.ok) throw new Error("La API respondió con error " + respuesta.status);
-      return await respuesta.json();
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("La API respondió con error " + r.status);
+      const datos = await r.json();
+      if (!Array.isArray(datos)) throw new Error("Respuesta inesperada de la API");
+      return datos;
     } catch (error) {
       if (i === intentos) throw error;
       await esperar(1500 * i);
@@ -143,441 +145,947 @@ async function consultarConReintentos(url, intentos = 3) {
   }
 }
 
-async function descargarAnio(anio) {
-  const nits = NITS_EXTRA.map(n => `'${n}'`).join(",");
-  const filtro =
-    `fecha_de_firma >= '${anio}-01-01T00:00:00' AND fecha_de_firma < '${anio + 1}-01-01T00:00:00'` +
-    ` AND (ciudad = 'Barrancabermeja' OR nit_entidad in (${nits}))`;
-
-  let registros = [];
-  let desde = 0;
-
-  // La API entrega máximo POR_PAGINA registros por consulta, así que pedimos "páginas" hasta que no lleguen más
-  while (true) {
-    const parametros = new URLSearchParams({
-      $select: CAMPOS.join(","),
-      $where: filtro,
-      $order: ":id",
-      $limit: POR_PAGINA,
-      $offset: desde
-    });
-    const lote = await consultarConReintentos(`${API}?${parametros}`);
-    if (!Array.isArray(lote)) throw new Error("Respuesta inesperada de la API");
-
-    registros = registros.concat(lote);
-    $("estadoCarga").textContent = `Descargando contratos… ${numero(registros.length)}`;
-
-    if (lote.length < POR_PAGINA) break;
-    desde += POR_PAGINA;
-  }
-
-  // Quitar duplicados usando el identificador único del contrato
-  const unicos = new Map();
-  registros.forEach(c => {
-    if (c.id_contrato && !unicos.has(c.id_contrato)) unicos.set(c.id_contrato, c);
-  });
-  app.duplicados = registros.length - unicos.size;
-
-  // Preparar cada contrato con los datos ya calculados
-  return [...unicos.values()].map(c => ({
-    ...c,
-    valor: Number(c.valor_del_contrato) || 0,
-    estado: clasificarEstado(c.estado_contrato),
-    tipo: clasificarTipo(c.tipodocproveedor),
-    mes: (c.fecha_de_firma || "").slice(0, 7),
-    entidad: c.nombre_entidad || "Sin dato",
-    contratista: c.proveedor_adjudicado || "Sin dato",
-    modalidad: c.modalidad_de_contratacion || "Sin dato",
-    url: c.urlproceso?.url || ""
-  }));
+// Consulta a SECOP II con parámetros SoQL
+function secop2(parametros) {
+  return consultar(`${API_SECOP2}?${new URLSearchParams(parametros)}`);
 }
 
-async function cargar() {
-  const anio = Number($("anio").value);
-  $("estadoCarga").textContent = "Conectando con SECOP II…";
-  document.body.classList.add("cargando");
+// ===== 3. MEMORIA (CACHÉ) =====
+// Guarda los resultados en el navegador: la siguiente visita carga al instante.
 
+function abrirMemoria() {
+  return new Promise((ok, falla) => {
+    if (!("indexedDB" in window)) return falla(new Error("Sin memoria"));
+    const pedido = indexedDB.open("transparencia-barranca", 2);
+    pedido.onupgradeneeded = () => { if (!pedido.result.objectStoreNames.contains("datos")) pedido.result.createObjectStore("datos"); };
+    pedido.onsuccess = () => ok(pedido.result);
+    pedido.onerror = () => falla(pedido.error);
+  });
+}
+
+async function leerMemoria(clave) {
   try {
-    app.todos = await descargarAnio(anio);
-    app.consultadoEn = new Date();
-    llenarListas();
-    aplicarFiltros();
+    const db = await abrirMemoria();
+    return await new Promise(ok => {
+      const p = db.transaction("datos").objectStore("datos").get(clave);
+      p.onsuccess = () => ok(p.result || null);
+      p.onerror = () => ok(null);
+    });
+  } catch { return null; }
+}
 
-    $("estadoCarga").textContent =
-      `${numero(app.todos.length)} contratos cargados · consultado ${app.consultadoEn.toLocaleString("es-CO")}`;
-    $("actualizacion").textContent =
-      `Consulta realizada el ${app.consultadoEn.toLocaleString("es-CO")} · ${numero(app.todos.length)} contratos únicos de ${anio}` +
-      (app.duplicados ? ` · ${numero(app.duplicados)} registros duplicados descartados` : " · sin duplicados");
+async function guardarMemoria(clave, valor) {
+  try {
+    const db = await abrirMemoria();
+    db.transaction("datos", "readwrite").objectStore("datos").put(valor, clave);
+  } catch { /* si no se puede guardar, no pasa nada */ }
+}
+
+// Resumen de todos los años, calculado cada día por GitHub Actions
+let promesaResumen = null;
+function cargarResumen() {
+  if (!promesaResumen) {
+    const version = Math.floor(Date.now() / 3600e3); // evita usar una copia vieja de más de una hora
+    promesaResumen = fetch(`datos/resumen.json?v=${version}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => (app.resumen = d))
+      .catch(() => null);
+  }
+  return promesaResumen;
+}
+const resumenFresco = () => app.resumen && (Date.now() - app.resumen.fecha) < HORAS_RESUMEN * 3600e3;
+
+// ===== 4. FILTROS → CONSULTA =====
+
+function condicionPeriodo() {
+  const anio = $("anio").value;
+  if (!anio) return "";
+  const a = Number(anio);
+  return `fecha_de_firma >= '${a}-01-01T00:00:00' AND fecha_de_firma < '${a + 1}-01-01T00:00:00'`;
+}
+
+// Condiciones de los filtros (sin la alerta seleccionada)
+function condicionFiltros() {
+  const partes = [BASE];
+  const periodo = condicionPeriodo();
+  if (periodo) partes.push(periodo);
+
+  const texto = textoConsulta($("buscador").value);
+  if (texto.length >= 3) {
+    partes.push(`(upper(proveedor_adjudicado) like '%${texto}%' OR upper(nombre_entidad) like '%${texto}%'` +
+      ` OR upper(objeto_del_contrato) like '%${texto}%' OR upper(referencia_del_contrato) like '%${texto}%')`);
+  }
+  if ($("filtroEntidad").value) partes.push(`nombre_entidad = ${literal($("filtroEntidad").value)}`);
+  if ($("filtroModalidad").value) partes.push(`modalidad_de_contratacion = ${literal($("filtroModalidad").value)}`);
+  if ($("filtroEstado").value) partes.push(`estado_contrato = ${literal($("filtroEstado").value)}`);
+
+  const tipo = $("filtroTipo").value;
+  if (tipo === "Empresa") partes.push(`tipodocproveedor = 'NIT'`);
+  if (tipo === "Persona natural") partes.push(`tipodocproveedor in (${DOCS_PERSONA.map(literal).join(",")})`);
+
+  return partes.join(" AND ");
+}
+
+// Reglas de las alertas, escritas como condiciones de consulta
+function reglasAlertas(contratistasMuchos = []) {
+  const hoy = hoyISO(), en30 = hoyISO(30), hace90 = hoyISO(-90);
+  return [
+    { id: "directaGrande", clase: "", titulo: "Contratación directa de $500 millones o más",
+      texto: "Contratos grandes que se adjudicaron sin competencia abierta.",
+      condicion: `modalidad_de_contratacion = 'Contratación directa' AND valor_del_contrato >= 500000000` },
+    { id: "muyGrandes", clase: "dorada", titulo: "Contratos de $10.000 millones o más",
+      texto: "Los contratos más grandes. Revisa también si el valor está bien digitado en SECOP.",
+      condicion: `valor_del_contrato >= 10000000000` },
+    { id: "vencidos", clase: "roja", titulo: "Fecha final vencida, pero siguen «en ejecución»",
+      texto: "Ya pasó su fecha de terminación y SECOP los sigue mostrando en ejecución. Puede ser falta de actualización o una prórroga sin reportar.",
+      condicion: `estado_contrato = 'En ejecución' AND fecha_de_fin_del_contrato < '${hoy}T00:00:00'` },
+    { id: "vencenPronto", clase: "dorada", titulo: "Terminan en los próximos 30 días",
+      texto: "Buen momento para preguntar por los resultados y entregables.",
+      condicion: `estado_contrato = 'En ejecución' AND fecha_de_fin_del_contrato >= '${hoy}T00:00:00' AND fecha_de_fin_del_contrato <= '${en30}T23:59:59'` },
+    { id: "muchosContratos", clase: "", titulo: "Contratistas con 5 o más contratos en ejecución a la vez",
+      texto: "Revisa si una misma persona o empresa puede cumplir tantos contratos al mismo tiempo.",
+      condicion: contratistasMuchos.length
+        ? `estado_contrato = 'En ejecución' AND proveedor_adjudicado in (${contratistasMuchos.map(literal).join(",")})`
+        : "1 = 0" },
+    { id: "sinPagos", clase: "dorada", titulo: "En ejecución hace más de 90 días, sin pagos reportados",
+      texto: "La entidad no ha reportado pagos en SECOP. Puede ser falta de reporte, no necesariamente falta de pago.",
+      condicion: `estado_contrato = 'En ejecución' AND valor_pagado = 0 AND valor_del_contrato > 0 AND fecha_de_inicio_del_contrato < '${hace90}T00:00:00'` }
+  ];
+}
+
+// Condición completa: filtros + alerta seleccionada
+function condicionCompleta() {
+  const base = condicionFiltros();
+  const regla = app.vista && app.alertas.find(a => a.id === app.vista);
+  return regla ? `${base} AND (${regla.condicion})` : base;
+}
+
+// ===== 5. CARGA DEL TABLERO =====
+
+function consultasTablero(where) {
+  const porAnio = !$("anio").value;
+  const tiempo = porAnio ? "date_extract_y(fecha_de_firma)" : "date_trunc_ym(fecha_de_firma)";
+  const sumaSi = (cond, nombre) => `sum(case(${cond}, 1, true, 0)) as ${nombre}`;
+
+  return {
+    resumen: secop2({ $select: "count(id_contrato) as n, sum(valor_del_contrato) as v, sum(valor_pagado) as p, count(distinct proveedor_adjudicado) as c", $where: where }),
+    modalidades: secop2({ $select: "modalidad_de_contratacion as k, count(id_contrato) as n, sum(valor_del_contrato) as v", $where: where, $group: "modalidad_de_contratacion", $order: "n DESC" }),
+    estados: secop2({ $select: "estado_contrato as k, count(id_contrato) as n, sum(valor_del_contrato) as v", $where: where, $group: "estado_contrato", $order: "n DESC" }),
+    documentos: secop2({ $select: "tipodocproveedor as k, count(id_contrato) as n, sum(valor_del_contrato) as v, count(distinct proveedor_adjudicado) as c", $where: where, $group: "tipodocproveedor" }),
+    entidades: secop2({ $select: `nombre_entidad as k, count(id_contrato) as n, sum(valor_del_contrato) as v, ${sumaSi("estado_contrato = 'En ejecución'", "ej")}, ${sumaSi("modalidad_de_contratacion = 'Contratación directa'", "dir")}`,
+                        $where: where, $group: "nombre_entidad", $order: "v DESC", $limit: 200 }),
+    tiempo: secop2({ $select: `${tiempo} as k, count(id_contrato) as n, sum(valor_del_contrato) as v`, $where: where, $group: "k", $order: "k" }),
+    tiposContrato: secop2({ $select: "tipo_de_contrato as k, count(id_contrato) as n, sum(valor_del_contrato) as v", $where: where, $group: "tipo_de_contrato", $order: "v DESC", $limit: 8 }),
+    contratistas: secop2({ $select: `proveedor_adjudicado as k, max(tipodocproveedor) as doc, count(id_contrato) as n, sum(valor_del_contrato) as v, ${sumaSi("estado_contrato = 'En ejecución'", "ej")}, count(distinct nombre_entidad) as e`,
+                           $where: where, $group: "proveedor_adjudicado", $order: "v DESC", $limit: 50 })
+  };
+}
+
+async function cargarTablero() {
+  const turno = ++app.turno;
+  const where = condicionCompleta();
+  const sinFiltros = where === BASE && !$("anio").value;
+  const clave = "tablero|" + where;
+
+  marcarCargando(true);
+  pintarContratos(true); // la tabla se carga por su lado
+
+  // 0) Sin filtros: se usa el resumen ya calculado (carga instantánea)
+  if (sinFiltros) {
+    await cargarResumen();
+    if (turno !== app.turno) return;
+    if (resumenFresco()) {
+      pintarTablero(app.resumen.tablero);
+      marcarCargando(false, app.resumen.fecha);
+      return;
+    }
+  }
+
+  // 1) Resultados guardados (de esta visita o de visitas anteriores)
+  let guardado = app.memoria.get(clave) || (sinFiltros ? await leerMemoria(clave) : null);
+  if (guardado && turno === app.turno) pintarTablero(guardado.datos);
+  const fresco = guardado && (Date.now() - guardado.fecha) < HORAS_CACHE * 3600e3;
+  if (fresco) { marcarCargando(false, guardado.fecha); return; }
+
+  // 2) Consultas a SECOP en paralelo; cada parte se pinta apenas llega
+  const consultas = consultasTablero(where);
+  const datos = {};
+  try {
+    await Promise.all(Object.entries(consultas).map(async ([nombre, promesa]) => {
+      datos[nombre] = await promesa;
+      if (turno === app.turno && !guardado) pintarParcial(nombre, datos);
+    }));
+    if (turno !== app.turno) return;
+    pintarTablero(datos);
+    const paquete = { datos, fecha: Date.now() };
+    app.memoria.set(clave, paquete);
+    if (sinFiltros) guardarMemoria(clave, paquete);
+    marcarCargando(false, paquete.fecha);
   } catch (error) {
     console.error(error);
-    $("estadoCarga").textContent = "No se pudo conectar con SECOP II. Revisa tu internet y recarga la página.";
-  } finally {
-    document.body.classList.remove("cargando");
+    if (turno === app.turno) {
+      $("estadoCarga").textContent = guardado
+        ? "No se pudo actualizar; se muestran los últimos datos guardados."
+        : "SECOP no respondió. Revisa tu internet y vuelve a intentar en un momento.";
+    }
   }
 }
 
-// ===== 4. FILTROS =====
+function marcarCargando(cargando, fechaDatos) {
+  document.body.classList.toggle("cargando", cargando);
+  const periodo = $("anio").value ? `de ${$("anio").value}` : "de todos los años";
+  if (cargando) {
+    $("estadoCarga").textContent = `Consultando SECOP ${periodo}…`;
+  } else {
+    const cuando = new Date(fechaDatos).toLocaleString("es-CO");
+    $("estadoCarga").textContent = `${numero(app.totalContratos)} contratos ${periodo} · datos de ${cuando}`;
+    $("actualizacion").textContent = `Datos consultados en SECOP el ${cuando}.`;
+  }
+}
 
-function llenarSelect(id, valores, textoTodos) {
+// Para pintar por partes mientras llegan las consultas
+function pintarParcial(nombre, datos) {
+  if (nombre === "resumen" || nombre === "modalidades" || nombre === "estados" || nombre === "documentos" || nombre === "contratistas") {
+    if (datos.resumen) pintarIndicadores(datos);
+  }
+  if (nombre === "entidades" && datos.resumen) pintarEntidades(datos);
+  if (nombre === "contratistas" && datos.resumen) pintarContratistas(datos);
+  pintarGraficos(datos);
+}
+
+function pintarTablero(datos) {
+  app.resultados = datos;
+  if (!app.listasListas) llenarListas(datos);
+  pintarIndicadores(datos);
+  pintarGraficos(datos);
+  pintarEntidades(datos);
+  pintarContratistas(datos);
+}
+
+function llenarSelect(id, valores, textoTodos, etiqueta = v => v) {
   const select = $(id);
   const actual = select.value;
   select.innerHTML = "";
   select.add(new Option(textoTodos, ""));
-  valores.forEach(v => select.add(new Option(v, v)));
+  valores.forEach(v => select.add(new Option(etiqueta(v), v)));
   if (valores.includes(actual)) select.value = actual;
 }
 
-function llenarListas() {
-  const unicos = campo => [...new Set(app.todos.map(c => c[campo]))].sort((a, b) => a.localeCompare(b, "es"));
-  llenarSelect("filtroEntidad", unicos("entidad"), "Todas las entidades");
-  llenarSelect("filtroModalidad", unicos("modalidad"), "Todas las modalidades");
-  llenarSelect("filtroEstado", unicos("estado"), "Todos los estados");
+// Las listas de los filtros se llenan con los datos sin filtrar
+function llenarListas(datos) {
+  if (condicionCompleta() !== BASE || $("anio").value) return;
+  const claves = lista => (lista || []).map(x => x.k).filter(Boolean).sort((a, b) => a.localeCompare(b, "es"));
+  llenarSelect("filtroEntidad", claves(datos.entidades), "Todas las entidades");
+  llenarSelect("filtroModalidad", claves(datos.modalidades), "Todas las modalidades");
+  llenarSelect("filtroEstado", claves(datos.estados), "Todos los estados", clasificarEstado);
+  app.listasListas = true;
 }
 
+let pausaFiltros;
 function aplicarFiltros() {
-  const texto = $("buscador").value.trim().toLowerCase();
-  const entidad = $("filtroEntidad").value;
-  const modalidad = $("filtroModalidad").value;
-  const estado = $("filtroEstado").value;
-  const tipo = $("filtroTipo").value;
+  clearTimeout(pausaFiltros);
+  pausaFiltros = setTimeout(() => {
+    $("vistaEspecial").hidden = !app.vista;
+    const regla = app.vista && app.alertas.find(a => a.id === app.vista);
+    if (regla) $("vistaEspecialTexto").textContent = "Mostrando: " + regla.titulo;
+    cargarTablero();
+    cargarAlertas();
+  }, 300);
+}
 
-  app.filtrados = app.todos.filter(c => {
-    const coincideTexto = !texto ||
-      c.contratista.toLowerCase().includes(texto) ||
-      c.entidad.toLowerCase().includes(texto) ||
-      (c.objeto_del_contrato || "").toLowerCase().includes(texto) ||
-      (c.referencia_del_contrato || "").toLowerCase().includes(texto) ||
-      (c.id_contrato || "").toLowerCase().includes(texto);
-    return coincideTexto &&
-      (!entidad || c.entidad === entidad) &&
-      (!modalidad || c.modalidad === modalidad) &&
-      (!estado || c.estado === estado) &&
-      (!tipo || c.tipo === tipo);
-  });
-
-  app.filasVisibles = FILAS_TABLA;
-  pintarTodo();
+function limpiarFiltrosSinCargar() {
+  $("buscador").value = "";
+  ["filtroEntidad", "filtroModalidad", "filtroEstado", "filtroTipo"].forEach(id => $(id).value = "");
+  app.vista = null;
 }
 
 function limpiarFiltros() {
-  $("buscador").value = "";
-  ["filtroEntidad", "filtroModalidad", "filtroEstado", "filtroTipo"].forEach(id => $(id).value = "");
+  limpiarFiltrosSinCargar();
   aplicarFiltros();
 }
 
-function pintarTodo() {
-  pintarIndicadores();
-  pintarGraficos();
-  pintarEntidades();
-  pintarContratistas();
-  pintarContratos();
+function irA(pestana) {
+  document.querySelectorAll(".pestana").forEach(s => s.classList.toggle("activa", s.dataset.tab === pestana));
+  document.querySelectorAll(".pestana-btn").forEach(b => b.classList.toggle("activa", b.dataset.tab === pestana));
+  $("barraFiltros").classList.toggle("oculto", ["buscar", "metodologia"].includes(pestana));
+  if (pestana === "inicio") Object.values(app.graficos).forEach(g => g.resize());
+
+  const limite = document.querySelector(".intro").getBoundingClientRect().bottom + window.scrollY - 70;
+  if (window.scrollY > limite) window.scrollTo({ top: limite, behavior: "smooth" });
+  history.replaceState(null, "", "#" + pestana);
 }
 
-// ===== 5. INDICADORES =====
+// ===== 6. INDICADORES Y ALERTAS =====
 
-function pintarIndicadores() {
-  const lista = app.filtrados;
-  const total = lista.reduce((s, c) => s + c.valor, 0);
+function pintarIndicadores(d) {
+  const r = (d.resumen && d.resumen[0]) || {};
+  const total = Number(r.v) || 0;
+  app.totalContratos = Number(r.n) || 0;
 
-  // Contratos
-  $("kpiContratos").textContent = numero(lista.length);
-  $("kpiContratosNota").textContent = lista.length === app.todos.length
-    ? "todos los contratos del año"
-    : `de ${numero(app.todos.length)} del año`;
-
-  // Valor
+  $("kpiContratos").textContent = numero(r.n);
+  $("kpiContratosNota").textContent = $("anio").value ? `firmados en ${$("anio").value}` : `desde ${PRIMER_ANIO} hasta hoy`;
   $("kpiValor").textContent = pesosCorto(total);
   $("kpiValorNota").textContent = pesos(total);
 
-  // Contratación directa
-  const directos = lista.filter(c => c.modalidad === "Contratación directa");
-  const valorDirecto = directos.reduce((s, c) => s + c.valor, 0);
-  $("kpiDirecta").textContent = porcentaje(directos.length, lista.length);
-  $("kpiDirectaNota").textContent = `${numero(directos.length)} contratos · ${porcentaje(valorDirecto, total)} del valor`;
+  if (d.modalidades) {
+    const dir = d.modalidades.find(m => m.k === "Contratación directa") || { n: 0, v: 0 };
+    $("kpiDirecta").textContent = porcentaje(Number(dir.n), Number(r.n));
+    $("kpiDirectaNota").textContent = `${numero(dir.n)} contratos · ${porcentaje(Number(dir.v), total)} del valor`;
+  }
 
-  // Contratistas distintos (empresas y personas)
-  const contratistas = new Map();
-  lista.forEach(c => contratistas.set(c.contratista, c.tipo));
-  const tipos = [...contratistas.values()];
-  $("kpiContratistas").textContent = numero(contratistas.size);
-  $("kpiContratistasNota").textContent =
-    `${numero(tipos.filter(t => t === "Empresa").length)} empresas · ${numero(tipos.filter(t => t === "Persona natural").length)} personas`;
+  $("kpiContratistas").textContent = numero(r.c);
+  if (d.documentos) {
+    const empresas = d.documentos.filter(x => clasificarTipo(x.k) === "Empresa").reduce((s, x) => s + Number(x.c), 0);
+    const personas = d.documentos.filter(x => clasificarTipo(x.k) === "Persona natural").reduce((s, x) => s + Number(x.c), 0);
+    $("kpiContratistasNota").textContent = `${numero(empresas)} empresas · ${numero(personas)} personas`;
+  }
 
-  // En ejecución
-  const enEjecucion = lista.filter(c => c.estado === "En ejecución");
-  const terminados = lista.filter(c => ["Terminado", "Cerrado", "Liquidado"].includes(c.estado));
-  $("kpiEjecucion").textContent = numero(enEjecucion.length);
-  $("kpiEjecucionNota").textContent = `${numero(terminados.length)} terminados o cerrados`;
+  if (d.estados) {
+    const suma = filtro => d.estados.filter(e => filtro(clasificarEstado(e.k))).reduce((s, e) => s + Number(e.n), 0);
+    $("kpiEjecucion").textContent = numero(suma(e => e === "En ejecución"));
+    $("kpiEjecucionNota").textContent = `${numero(suma(e => TERMINADOS.includes(e)))} terminados o cerrados`;
+  }
 
-  // Concentración: qué porcentaje del dinero se llevan los 10 contratistas más grandes
-  const top10 = Object.values(agrupar(lista, "contratista"))
-    .sort((a, b) => b.valor - a.valor)
-    .slice(0, 10)
-    .reduce((s, g) => s + g.valor, 0);
-  $("kpiConcentracion").textContent = porcentaje(top10, total);
+  if (d.contratistas) {
+    const top10 = d.contratistas.slice(0, 10).reduce((s, x) => s + Number(x.v), 0);
+    $("kpiConcentracion").textContent = porcentaje(top10, total);
+  }
+
+  $("kpiPagado").textContent = porcentaje(Number(r.p) || 0, total);
+  $("kpiPagadoNota").textContent = `${pesosCorto(r.p)} pagados según SECOP`;
 }
 
-// ===== 6. GRÁFICOS =====
+// Las alertas se calculan con los filtros (sin la alerta seleccionada)
+async function cargarAlertas() {
+  const where = condicionFiltros();
+  const clave = "alertas|" + where;
 
-function color(variable) {
-  return getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
+  // Sin filtros: alertas ya calculadas en el resumen
+  if (where === BASE) {
+    await cargarResumen();
+    if (resumenFresco() && app.resumen.alertas) {
+      const { muchos, conteos } = app.resumen.alertas;
+      app.alertas = reglasAlertas(muchos).map(r => ({ ...r, n: conteos[r.id]?.n || 0, valor: conteos[r.id]?.valor || 0 }));
+      pintarAlertas();
+      return;
+    }
+  }
+  const guardado = app.memoria.get(clave);
+  if (guardado) { app.alertas = guardado; pintarAlertas(); return; }
+
+  try {
+    const muchos = await secop2({
+      $select: "proveedor_adjudicado as k, count(id_contrato) as n",
+      $where: `${where} AND estado_contrato = 'En ejecución'`,
+      $group: "proveedor_adjudicado", $having: "n >= 5", $order: "n DESC", $limit: 300
+    });
+    const reglas = reglasAlertas(muchos.map(m => m.k).filter(Boolean));
+    const conteos = await Promise.all(reglas.map(r =>
+      r.condicion === "1 = 0" ? [{ n: 0, v: 0 }] :
+      secop2({ $select: "count(id_contrato) as n, sum(valor_del_contrato) as v", $where: `${where} AND (${r.condicion})` })));
+    if (where !== condicionFiltros()) return; // los filtros cambiaron mientras tanto
+    app.alertas = reglas.map((r, i) => ({ ...r, n: Number(conteos[i][0]?.n) || 0, valor: Number(conteos[i][0]?.v) || 0 }));
+    app.memoria.set(clave, app.alertas);
+    pintarAlertas();
+  } catch (error) {
+    console.error(error);
+    $("listaAlertas").innerHTML = "<p>No se pudieron calcular las alertas. Intenta de nuevo en un momento.</p>";
+  }
 }
+
+function pintarAlertas() {
+  $("listaAlertas").innerHTML = app.alertas.map(a => `
+    <button class="tarjeta-alerta ${a.clase}" data-alerta="${a.id}">
+      <h3>${escapar(a.titulo)}</h3>
+      <strong>${numero(a.n)}</strong>
+      <p>${escapar(a.texto)}</p>
+      <em>${pesosCorto(a.valor)} en total · Ver contratos →</em>
+    </button>`).join("");
+  $("kpiAlertas").textContent = numero(app.alertas.reduce((s, a) => s + a.n, 0));
+}
+
+// ===== 7. GRÁFICOS =====
+
+const color = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 
 function dibujar(id, configuracion) {
-  if (app.graficos[id]) app.graficos[id].destroy(); // borrar el gráfico anterior antes de redibujar
+  if (app.graficos[id]) app.graficos[id].destroy();
   app.graficos[id] = new Chart($(id), configuracion);
 }
 
-function recortar(texto, max = 40) {
-  return texto.length > max ? texto.slice(0, max) + "…" : texto;
+function sumarPor(lista, clasificar) {
+  const grupos = {};
+  (lista || []).forEach(x => {
+    const k = clasificar(x.k);
+    if (!grupos[k]) grupos[k] = { n: 0, v: 0 };
+    grupos[k].n += Number(x.n) || 0;
+    grupos[k].v += Number(x.v) || 0;
+  });
+  return Object.entries(grupos);
 }
 
-function pintarGraficos() {
+function pintarGraficos(d) {
   if (typeof Chart === "undefined") return;
   Chart.defaults.color = color("--texto-suave");
   Chart.defaults.borderColor = "rgba(255,255,255,0.08)";
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
   Chart.defaults.maintainAspectRatio = false;
 
-  const paleta = [color("--verde-claro"), color("--dorado"), color("--azul"), color("--naranja"),
-                  color("--rojo"), "#a78bfa", "#f472b6", "#94a3b8"];
-  const lista = app.filtrados;
+  const paleta = [color("--verde-claro"), color("--dorado"), color("--azul"), color("--naranja"), color("--rojo"), "#a78bfa", "#f472b6", "#94a3b8"];
   const enMillones = { callbacks: { label: ctx => " " + pesosCorto(ctx.raw * 1e6) } };
+  const leyenda = { position: "bottom", labels: { boxWidth: 12 } };
+  const millones = v => (Number(v) || 0) / 1e6;
 
-  // Entidades (top 10 por valor)
-  const entidades = Object.entries(agrupar(lista, "entidad")).sort((a, b) => b[1].valor - a[1].valor).slice(0, 10);
-  dibujar("gEntidades", {
-    type: "bar",
-    data: {
-      labels: entidades.map(e => recortar(e[0], 50)),
-      datasets: [{ data: entidades.map(e => e[1].valor / 1e6), backgroundColor: color("--verde-claro"), borderRadius: 8 }]
-    },
-    options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: enMillones },
-               scales: { x: { title: { display: true, text: "Millones de pesos" } } } }
-  });
+  if (d.entidades) {
+    const top = d.entidades.slice(0, 10);
+    dibujar("gEntidades", {
+      type: "bar",
+      data: { labels: top.map(e => recortar(e.k || "Sin dato", 50)),
+              datasets: [{ data: top.map(e => millones(e.v)), backgroundColor: color("--verde-claro"), borderRadius: 8 }] },
+      options: { indexAxis: "y", plugins: { legend: { display: false }, tooltip: enMillones },
+                 scales: { x: { title: { display: true, text: "Millones de pesos" } } } }
+    });
+  }
 
-  // Mes a mes
-  const meses = agrupar(lista, "mes");
-  const ordenMeses = Object.keys(meses).filter(m => m !== "Sin dato").sort();
-  dibujar("gMeses", {
-    type: "line",
-    data: {
-      labels: ordenMeses,
-      datasets: [{ data: ordenMeses.map(m => meses[m].valor / 1e6), borderColor: color("--dorado"),
-                   backgroundColor: "rgba(245,185,21,0.15)", fill: true, tension: 0.35, pointRadius: 3 }]
-    },
-    options: { plugins: { legend: { display: false }, tooltip: enMillones } }
-  });
+  if (d.tiempo) {
+    const filas = d.tiempo.filter(t => t.k);
+    const porAnio = !$("anio").value;
+    $("tituloTiempo").textContent = porAnio ? "Contratación por año" : "Contratación mes a mes";
+    dibujar("gMeses", {
+      type: porAnio ? "bar" : "line",
+      data: { labels: filas.map(t => porAnio ? t.k : t.k.slice(0, 7)),
+              datasets: [{ data: filas.map(t => millones(t.v)), borderColor: color("--dorado"), backgroundColor: porAnio ? color("--dorado") : "rgba(245,185,21,0.15)",
+                           fill: true, tension: 0.35, pointRadius: 3, borderRadius: 8 }] },
+      options: { plugins: { legend: { display: false }, tooltip: enMillones } }
+    });
+  }
 
-  // Modalidad (cantidad de contratos)
-  const modalidades = Object.entries(agrupar(lista, "modalidad")).sort((a, b) => b[1].n - a[1].n);
-  dibujar("gModalidad", {
-    type: "doughnut",
-    data: { labels: modalidades.map(m => m[0]),
-            datasets: [{ data: modalidades.map(m => m[1].n), backgroundColor: paleta, borderWidth: 0 }] },
-    options: { cutout: "62%", plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } } } }
-  });
+  if (d.modalidades) {
+    dibujar("gModalidad", {
+      type: "doughnut",
+      data: { labels: d.modalidades.map(m => m.k || "Sin dato"), datasets: [{ data: d.modalidades.map(m => Number(m.n)), backgroundColor: paleta, borderWidth: 0 }] },
+      options: { cutout: "62%", plugins: { legend: leyenda } }
+    });
+  }
 
-  // Empresas vs personas (valor)
-  const tipos = Object.entries(agrupar(lista, "tipo"));
-  dibujar("gTipo", {
-    type: "doughnut",
-    data: { labels: tipos.map(t => t[0]),
-            datasets: [{ data: tipos.map(t => t[1].valor / 1e6), backgroundColor: [color("--azul"), color("--dorado"), "#94a3b8"], borderWidth: 0 }] },
-    options: { cutout: "62%", plugins: { legend: { position: "bottom", labels: { boxWidth: 12 } }, tooltip: enMillones } }
-  });
+  if (d.documentos) {
+    const tipos = sumarPor(d.documentos, clasificarTipo);
+    dibujar("gTipo", {
+      type: "doughnut",
+      data: { labels: tipos.map(t => t[0]), datasets: [{ data: tipos.map(t => millones(t[1].v)), backgroundColor: [color("--azul"), color("--dorado"), "#94a3b8"], borderWidth: 0 }] },
+      options: { cutout: "62%", plugins: { legend: leyenda, tooltip: enMillones } }
+    });
+  }
 
-  // Estados (cantidad)
-  const estados = Object.entries(agrupar(lista, "estado")).sort((a, b) => b[1].n - a[1].n);
-  dibujar("gEstados", {
-    type: "bar",
-    data: { labels: estados.map(e => e[0]),
-            datasets: [{ data: estados.map(e => e[1].n), backgroundColor: paleta, borderRadius: 8 }] },
-    options: { plugins: { legend: { display: false } } }
-  });
+  if (d.tiposContrato) {
+    dibujar("gTipoContrato", {
+      type: "bar",
+      data: { labels: d.tiposContrato.map(t => recortar(t.k || "Sin dato", 28)),
+              datasets: [{ data: d.tiposContrato.map(t => millones(t.v)), backgroundColor: paleta, borderRadius: 8 }] },
+      options: { plugins: { legend: { display: false }, tooltip: enMillones } }
+    });
+  }
+
+  if (d.estados) {
+    const estados = sumarPor(d.estados, clasificarEstado).sort((a, b) => b[1].n - a[1].n);
+    dibujar("gEstados", {
+      type: "bar",
+      data: { labels: estados.map(e => e[0]), datasets: [{ data: estados.map(e => e[1].n), backgroundColor: paleta, borderRadius: 8 }] },
+      options: { plugins: { legend: { display: false } } }
+    });
+  }
 }
 
-// ===== 7. TABLAS =====
+// ===== 8. ENTIDADES Y CONTRATISTAS =====
 
-function pintarEntidades() {
-  const filas = Object.entries(agrupar(app.filtrados, "entidad")).sort((a, b) => b[1].valor - a[1].valor);
-
-  $("tablaEntidades").innerHTML = filas.map(([nombre, g]) => {
-    const deLaEntidad = app.filtrados.filter(c => c.entidad === nombre);
-    const ejecucion = deLaEntidad.filter(c => c.estado === "En ejecución").length;
-    const directos = deLaEntidad.filter(c => c.modalidad === "Contratación directa").length;
-    return `
-      <tr class="clic" data-entidad="${escapar(nombre)}">
-        <td>${escapar(nombre)}</td>
-        <td class="num">${numero(g.n)}</td>
-        <td class="valor">${pesosCorto(g.valor)}</td>
-        <td class="num">${numero(ejecucion)}</td>
-        <td class="num">${porcentaje(directos, g.n)}</td>
-      </tr>`;
-  }).join("") || `<tr><td colspan="5">No hay contratos con estos filtros.</td></tr>`;
+function pintarEntidades(d) {
+  if (!d.entidades) return;
+  $("tarjetasEntidades").innerHTML = d.entidades.map(e => `
+    <button class="tarjeta-entidad" data-entidad="${escapar(e.k || "")}">
+      <h3>${escapar(e.k || "Sin dato")}</h3>
+      <div class="monto">${pesosCorto(e.v)}</div>
+      <div class="datos">
+        <div><b>${numero(e.n)}</b>contratos</div>
+        <div><b>${numero(e.ej)}</b>en ejecución</div>
+        <div><b>${porcentaje(Number(e.dir), Number(e.n))}</b>directa</div>
+      </div>
+    </button>`).join("") || "<p>No hay contratos con estos filtros.</p>";
 }
 
-function pintarContratistas() {
-  const total = app.filtrados.reduce((s, c) => s + c.valor, 0);
-  const datos = {};
-  app.filtrados.forEach(c => {
-    if (!datos[c.contratista]) datos[c.contratista] = { n: 0, valor: 0, tipo: c.tipo, entidades: new Set() };
-    const d = datos[c.contratista];
-    d.n += 1;
-    d.valor += c.valor;
-    d.entidades.add(c.entidad);
-  });
-
-  const filas = Object.entries(datos).sort((a, b) => b[1].valor - a[1].valor).slice(0, 25);
-  const mayor = filas.length ? filas[0][1].valor : 1;
-
-  $("tablaContratistas").innerHTML = filas.map(([nombre, d], i) => `
-    <tr class="clic" data-contratista="${escapar(nombre)}">
+function pintarContratistas(d) {
+  if (!d.contratistas || !d.resumen) return;
+  const total = Number(d.resumen[0]?.v) || 0;
+  const mayor = Number(d.contratistas[0]?.v) || 1;
+  $("tablaContratistas").innerHTML = d.contratistas.map((x, i) => `
+    <tr class="clic" data-contratista="${escapar(x.k || "")}">
       <td>${i + 1}</td>
-      <td>${escapar(nombre)}</td>
-      <td><span class="etiqueta">${d.tipo}</span></td>
-      <td class="num">${numero(d.n)}</td>
-      <td class="num">${numero(d.entidades.size)}</td>
-      <td class="valor">${pesosCorto(d.valor)}</td>
-      <td class="num">${porcentaje(d.valor, total)}<div class="barra"><i style="width:${(d.valor / mayor * 100).toFixed(1)}%"></i></div></td>
-    </tr>`).join("") || `<tr><td colspan="7">No hay contratos con estos filtros.</td></tr>`;
+      <td>${escapar(x.k || "Sin dato")}</td>
+      <td><span class="etiqueta">${clasificarTipo(x.doc)}</span></td>
+      <td class="num">${numero(x.n)}</td>
+      <td class="num">${numero(x.ej)}</td>
+      <td class="num">${numero(x.e)}</td>
+      <td class="valor">${pesosCorto(x.v)}</td>
+      <td class="num">${porcentaje(Number(x.v), total)}<div class="barra"><i style="width:${(Number(x.v) / mayor * 100).toFixed(1)}%"></i></div></td>
+    </tr>`).join("") || `<tr><td colspan="8">No hay contratos con estos filtros.</td></tr>`;
 }
 
-function pintarContratos() {
-  const lista = [...app.filtrados].sort((a, b) => (b.fecha_de_firma || "").localeCompare(a.fecha_de_firma || ""));
-  const total = lista.reduce((s, c) => s + c.valor, 0);
-  const visibles = lista.slice(0, app.filasVisibles);
+// Secretarías y dependencias de la Alcaldía (vienen del resumen diario)
+async function pintarSecretarias() {
+  await cargarResumen();
+  const s = app.resumen?.secretarias;
+  if (!s) { $("tarjetasSecretarias").innerHTML = "<p>Todavía no hay datos de secretarías. Se generan con la actualización diaria.</p>"; return; }
 
-  $("contador").textContent =
-    `${numero(lista.length)} contratos · ${pesos(total)} · mostrando ${numero(visibles.length)}`;
+  $("notaSecretarias").textContent =
+    `${numero(s.total)} contratos de la Alcaldía en SECOP II, de todos los años, repartidos en ${s.unidades.length} secretarías y dependencias. ` +
+    `Datos del ${new Date(app.resumen.fecha).toLocaleDateString("es-CO")}. Haz clic en una para ver con quién contrata.`;
 
-  $("tablaContratos").innerHTML = visibles.map(c => `
-    <tr class="clic" data-id="${escapar(c.id_contrato)}">
-      <td>${fecha(c.fecha_de_firma)}</td>
-      <td>${escapar(c.referencia_del_contrato || c.id_contrato)}</td>
+  $("tarjetasSecretarias").innerHTML = s.unidades.map((u, i) => `
+    <button class="tarjeta-entidad" data-secretaria="${i}">
+      <h3>${escapar(u.nombre)}</h3>
+      <div class="monto">${pesosCorto(u.v)}</div>
+      <div class="datos">
+        <div><b>${numero(u.n)}</b>contratos</div>
+        <div><b>${numero(u.ej)}</b>en ejecución</div>
+        <div><b>${porcentaje(u.dir, u.n)}</b>directa</div>
+      </div>
+    </button>`).join("");
+}
+
+function verSecretaria(i) {
+  const u = app.resumen.secretarias.unidades[i];
+  const filaCorta = c => `
+    <tr class="clic" data-id="${escapar(c.id)}">
+      <td>${escapar(c.f)}</td><td>${escapar(c.ref)}</td><td>${escapar(c.prov)}</td>
+      <td class="objeto">${escapar(recortar(c.obj, 90))}</td>
+      <td><span class="etiqueta ${claseEstado(clasificarEstado(c.est))}">${escapar(clasificarEstado(c.est))}</span></td>
+      <td class="valor">${pesos(c.v)}</td>
+    </tr>`;
+  const tabla = filas => `<div class="tabla-contenedor"><table>
+      <thead><tr><th>Firma</th><th>Contrato</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Valor</th></tr></thead>
+      <tbody>${filas.map(filaCorta).join("")}</tbody></table></div>`;
+
+  $("detalleSecretaria").hidden = false;
+  $("detalleSecretaria").innerHTML = `
+    <div class="detalle-cabecera">
+      <div>
+        <h2>${escapar(u.nombre)}</h2>
+        ${u.otrosNombres.length ? `<p class="nota-pequena">También aparece en SECOP como: ${u.otrosNombres.map(escapar).join(" · ")}</p>` : ""}
+      </div>
+      <button class="boton-secundario" id="btnCerrarSecretaria">Cerrar ✕</button>
+    </div>
+    <div class="detalle-cifras">
+      <div><span>Valor contratado</span><b>${pesosCorto(u.v)}</b></div>
+      <div><span>Contratos</span><b>${numero(u.n)}</b></div>
+      <div><span>En ejecución</span><b>${numero(u.ej)}</b></div>
+      <div><span>Contratación directa</span><b>${porcentaje(u.dir, u.n)}</b></div>
+    </div>
+    <div class="detalle-columnas">
+      <div>
+        <h3>Valor contratado por año</h3>
+        <div class="lienzo"><canvas id="gSecretaria"></canvas></div>
+      </div>
+      <div>
+        <h3>Contratistas con más recursos en esta dependencia</h3>
+        <div class="tabla-contenedor"><table>
+          <thead><tr><th>Contratista</th><th>Tipo</th><th>Contratos</th><th>Valor</th></tr></thead>
+          <tbody>${u.contratistas.map(k => `<tr class="clic" data-contratista="${escapar(k.k)}"><td>${escapar(k.k)}</td>
+            <td><span class="etiqueta">${k.empresa ? "Empresa" : "Persona"}</span></td><td class="num">${numero(k.n)}</td>
+            <td class="valor">${pesosCorto(k.v)}</td></tr>`).join("")}</tbody></table></div>
+      </div>
+    </div>
+    <h3>Contratos más grandes</h3>
+    ${tabla(u.mayores)}
+    <h3>Contratos más recientes</h3>
+    ${tabla(u.recientes)}
+    <p class="nota-pequena">Haz clic en un contrato para ver su ficha, o en un contratista para ver todos sus contratos.</p>`;
+
+  if (typeof Chart !== "undefined") {
+    const anios = u.anios.filter(a => a[0] !== "Sin fecha");
+    dibujar("gSecretaria", {
+      type: "bar",
+      data: { labels: anios.map(a => a[0]), datasets: [{ data: anios.map(a => a[1] / 1e6), backgroundColor: color("--dorado"), borderRadius: 8 }] },
+      options: { plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => " " + pesosCorto(ctx.raw * 1e6) } } } }
+    });
+  }
+  $("detalleSecretaria").scrollIntoView({ behavior: "smooth" });
+}
+
+// ===== 9. TABLA DE CONTRATOS =====
+
+function prepararSecop2(c) {
+  return {
+    id: c.id_contrato,
+    referencia: c.referencia_del_contrato || c.id_contrato,
+    entidad: c.nombre_entidad || "Sin dato",
+    contratista: c.proveedor_adjudicado || "Sin dato",
+    tipo: clasificarTipo(c.tipodocproveedor),
+    objeto: c.objeto_del_contrato || "",
+    tipoContrato: c.tipo_de_contrato || "Sin dato",
+    modalidad: c.modalidad_de_contratacion || "Sin dato",
+    valor: Number(c.valor_del_contrato) || 0,
+    pagado: Number(c.valor_pagado) || 0,
+    firma: c.fecha_de_firma || "",
+    inicio: c.fecha_de_inicio_del_contrato || "",
+    fin: c.fecha_de_fin_del_contrato || "",
+    estado: clasificarEstado(c.estado_contrato),
+    estadoOriginal: c.estado_contrato || "",
+    diasAdicionados: c.dias_adicionados || "0",
+    origen: "SECOP II",
+    url: ""
+  };
+}
+
+function filaContrato(c, conOrigen = false) {
+  return `
+    <tr class="clic" data-id="${escapar(c.id)}">
+      <td>${fecha(c.firma)}</td>
+      <td>${escapar(c.referencia)}</td>
       <td>${escapar(recortar(c.entidad, 45))}</td>
       <td>${escapar(c.contratista)}</td>
-      <td class="objeto">${escapar(recortar(c.objeto_del_contrato || "", 110))}</td>
+      <td class="objeto">${escapar(recortar(c.objeto, 110))}</td>
       <td><span class="etiqueta ${claseEstado(c.estado)}">${escapar(c.estado)}</span></td>
+      ${conOrigen ? `<td><span class="etiqueta">${escapar(c.origen)}</span></td>` : ""}
       <td class="valor">${pesos(c.valor)}</td>
-    </tr>`).join("") || `<tr><td colspan="7">No hay contratos con estos filtros.</td></tr>`;
-
-  $("btnMas").style.display = lista.length > app.filasVisibles ? "block" : "none";
+    </tr>`;
 }
 
-// ===== 8. FICHA DEL CONTRATO =====
+let turnoTabla = 0;
+async function pintarContratos(desdeCero) {
+  const turno = desdeCero ? ++turnoTabla : turnoTabla;
+  if (desdeCero) {
+    app.filas = [];
+    $("tablaContratos").innerHTML = `<tr><td colspan="7">Cargando contratos…</td></tr>`;
+    $("contador").textContent = "Cargando…";
+  }
+  const orden = $("ordenContratos").value === "valor" ? "valor_del_contrato DESC" : "fecha_de_firma DESC";
+  $("btnMas").disabled = true;
+  try {
+    const porFecha = $("ordenContratos").value !== "valor";
+    const where = condicionCompleta() + (porFecha ? " AND fecha_de_firma IS NOT NULL" : "");
 
-function abrirFicha(id) {
-  const c = app.todos.find(x => x.id_contrato === id);
-  if (!c) return;
+    // Sin filtros: los 100 contratos más recientes ya vienen en el resumen diario
+    if (desdeCero && porFecha && condicionCompleta() === BASE && !$("anio").value) {
+      await cargarResumen();
+      const t = resumenFresco() && app.resumen.tablero;
+      if (t && t.tabla && t.tablaConteo) {
+        if (turno !== turnoTabla) return;
+        app.conteoTabla = t.tablaConteo[0];
+        app.filas = t.tabla.map(prepararSecop2);
+        app.filas.forEach(c => app.indice.set(c.id, c));
+        $("contador").textContent = `${numero(app.conteoTabla.n)} contratos · ${pesos(app.conteoTabla.v)} · mostrando ${numero(app.filas.length)}`;
+        $("tablaContratos").innerHTML = app.filas.map(c => filaContrato(c)).join("");
+        $("btnMas").style.display = Number(app.conteoTabla.n) > app.filas.length ? "block" : "none";
+        return;
+      }
+    }
+    const [lote, conteo] = await Promise.all([
+      secop2({ $select: CAMPOS.join(","), $where: where, $order: orden + ", id_contrato", $limit: FILAS_TABLA, $offset: app.filas.length }),
+      desdeCero ? secop2({ $select: "count(id_contrato) as n, sum(valor_del_contrato) as v", $where: where }) : null
+    ]);
+    if (turno !== turnoTabla) return;
+    if (conteo) app.conteoTabla = conteo[0] || { n: 0, v: 0 };
+
+    const nuevos = lote.map(prepararSecop2);
+    nuevos.forEach(c => app.indice.set(c.id, c));
+    app.filas = app.filas.concat(nuevos);
+
+    const total = Number(app.conteoTabla?.n) || 0;
+    $("contador").textContent = `${numero(total)} contratos · ${pesos(app.conteoTabla?.v)} · mostrando ${numero(app.filas.length)}`;
+    $("tablaContratos").innerHTML = app.filas.map(c => filaContrato(c)).join("") ||
+      `<tr><td colspan="7">No hay contratos con estos filtros.</td></tr>`;
+    $("btnMas").style.display = total > app.filas.length ? "block" : "none";
+  } catch (error) {
+    console.error(error);
+    if (turno === turnoTabla) $("contador").textContent = "No se pudieron cargar los contratos. Intenta de nuevo.";
+  } finally {
+    $("btnMas").disabled = false;
+  }
+}
+
+// ===== 10. BUSCADOR SECOP I Y II (todos los años) =====
+
+function prepararIntegrado(c, i) {
+  const numeroContrato = c.numero_del_contrato || c.numero_de_proceso || "Sin número";
+  return {
+    id: "busq-" + i + "-" + numeroContrato,
+    referencia: numeroContrato,
+    entidad: c.nombre_de_la_entidad || "Sin dato",
+    contratista: c.nom_raz_social_contratista || "Sin dato",
+    tipo: clasificarTipo(c.tipo_documento_proveedor),
+    objeto: c.objeto_a_contratar || c.objeto_del_proceso || "",
+    tipoContrato: c.tipo_de_contrato || "Sin dato",
+    modalidad: c.modalidad_de_contrataci_n || "Sin dato",
+    valor: Number(c.valor_contrato) || 0,
+    pagado: null,
+    firma: c.fecha_de_firma_del_contrato || "",
+    inicio: c.fecha_inicio_ejecuci_n || "",
+    fin: c.fecha_fin_ejecuci_n || "",
+    estado: clasificarEstado(c.estado_del_proceso),
+    estadoOriginal: c.estado_del_proceso || "",
+    diasAdicionados: null,
+    origen: c.origen === "SECOPI" ? "SECOP I" : c.origen === "SECOPII" ? "SECOP II" : (c.origen || "SECOP"),
+    url: c.url_contrato || ""
+  };
+}
+
+function condicionBusqueda(tipo, texto) {
+  if (tipo === "documento") {
+    const num = texto.replace(/\D/g, "");
+    if (num.length < 5) throw new Error("Escribe la cédula o NIT completo (solo números).");
+    const opciones = [num];
+    if (num.length === 10 && /^[89]/.test(num)) opciones.push(num.slice(0, 9)); // NIT escrito con dígito de verificación
+    return "(" + opciones.map(n => `documento_proveedor = '${n}' OR documento_proveedor like '${n}-%'`).join(" OR ") + ")";
+  }
+  const t = textoConsulta(texto);
+  if (t.length < 3) throw new Error("Escribe al menos 3 letras.");
+  if (tipo === "contrato") return `(upper(numero_del_contrato) like '%${t}%' OR upper(numero_de_proceso) like '%${t}%')`;
+  if (tipo === "objeto") return `upper(objeto_a_contratar) like '%${t}%'`;
+  return `upper(nom_raz_social_contratista) like '%${t}%'`;
+}
+
+async function buscarEnSecop(evento) {
+  evento.preventDefault();
+  const tipo = $("tipoBusqueda").value;
+  const texto = $("textoBusqueda").value;
+  const alcance = $("alcanceBusqueda").value;
+
+  let filtro;
+  try { filtro = condicionBusqueda(tipo, texto); }
+  catch (error) { $("resultadoBusquedaInfo").textContent = error.message; return; }
+
+  if (alcance === "barranca") {
+    filtro += ` AND (municipio_entidad = 'Barrancabermeja' OR ${NITS_EXTRA.map(n => `nit_de_la_entidad like '${n}%'`).join(" OR ")})`;
+  }
+
+  $("btnBuscar").disabled = true;
+  $("resultadoBusquedaInfo").textContent = alcance === "colombia"
+    ? "Buscando en todo el país… puede tardar hasta un minuto."
+    : "Buscando en SECOP I y SECOP II…";
+
+  try {
+    const p = new URLSearchParams({ $select: CAMPOS_INTEGRADO.join(","), $where: filtro, $order: "fecha_de_firma_del_contrato DESC", $limit: 1000 });
+    const crudos = await consultar(`${API_INTEGRADO}?${p}`, 2);
+
+    // Si un contrato aparece varias veces (por modificaciones), se deja la versión de mayor valor
+    const unicos = new Map();
+    crudos.map(prepararIntegrado).forEach(c => {
+      const clave = c.origen + "|" + c.referencia + "|" + c.entidad;
+      const previo = unicos.get(clave);
+      if (!previo || c.valor > previo.valor) unicos.set(clave, c);
+    });
+    const resultados = [...unicos.values()];
+    resultados.forEach(c => app.indice.set(c.id, c));
+    pintarResultados(resultados, crudos.length >= 1000);
+  } catch (error) {
+    console.error(error);
+    $("resultadoBusquedaInfo").textContent = "SECOP tardó demasiado o no respondió. Intenta de nuevo o escribe un dato más completo.";
+  } finally {
+    $("btnBuscar").disabled = false;
+  }
+}
+
+function pintarResultados(lista, recortado) {
+  const total = lista.reduce((s, c) => s + c.valor, 0);
+  const entidades = new Set(lista.map(c => c.entidad)).size;
+  const secop1 = lista.filter(c => c.origen === "SECOP I").length;
+
+  $("resultadoBusquedaInfo").textContent = lista.length
+    ? `${numero(lista.length)} contratos encontrados${recortado ? " (se muestran los 1.000 más recientes; escribe un dato más específico para afinar)" : ""}. Haz clic en uno para ver su ficha.`
+    : "No se encontraron contratos. Prueba sin tildes, con menos palabras o con «Toda Colombia».";
+
+  $("resumenBusqueda").hidden = !lista.length;
+  $("resumenBusqueda").innerHTML = `
+    <div><span>Contratos</span><strong>${numero(lista.length)}</strong></div>
+    <div><span>Valor total</span><strong>${pesosCorto(total)}</strong></div>
+    <div><span>Entidades</span><strong>${numero(entidades)}</strong></div>
+    <div><span>SECOP I / SECOP II</span><strong>${numero(secop1)} / ${numero(lista.length - secop1)}</strong></div>`;
+
+  $("contenedorResultados").hidden = !lista.length;
+  $("tablaResultados").innerHTML = lista.map(c => filaContrato(c, true)).join("");
+}
+
+// ===== 11. FICHA DEL CONTRATO =====
+
+async function abrirFicha(id) {
+  let c = app.indice.get(id);
+  if (!c) {
+    // Contrato que no está en memoria (por ejemplo, desde Secretarías): se pide a SECOP
+    try {
+      const [r] = await secop2({ $select: CAMPOS.join(","), $where: `id_contrato = ${literal(id)}`, $limit: 1 });
+      if (r) { c = prepararSecop2(r); app.indice.set(c.id, c); }
+    } catch { /* sin datos */ }
+    if (!c) { alert("No se pudo abrir este contrato. Intenta de nuevo."); return; }
+  }
 
   const dato = (titulo, valor, completo = false) =>
-    `<div class="${completo ? "completo" : ""}"><span>${titulo}</span>${escapar(valor || "Sin dato")}</div>`;
+    `<div class="${completo ? "completo" : ""}"><span>${titulo}</span>${escapar(valor == null || valor === "" ? "Sin dato" : valor)}</div>`;
 
   $("fichaContenido").innerHTML = `
     <span class="etiqueta ${claseEstado(c.estado)}">${escapar(c.estado)}</span>
-    <h3 class="ficha-titulo">${escapar(c.referencia_del_contrato || c.id_contrato)}</h3>
+    <span class="etiqueta">${escapar(c.origen)}</span>
+    <h3 class="ficha-titulo">${escapar(c.referencia)}</h3>
     <div class="ficha-grid">
-      ${dato("Objeto del contrato", c.objeto_del_contrato, true)}
+      ${dato("Objeto del contrato", c.objeto, true)}
       ${dato("Entidad contratante", c.entidad)}
       ${dato("Contratista", c.contratista)}
       ${dato("Tipo de contratista", c.tipo)}
-      ${dato("Tipo de contrato", c.tipo_de_contrato)}
+      ${dato("Tipo de contrato", c.tipoContrato)}
       ${dato("Modalidad", c.modalidad)}
       ${dato("Valor del contrato", pesos(c.valor))}
-      ${dato("Fecha de firma", fecha(c.fecha_de_firma))}
-      ${dato("Fecha de inicio", fecha(c.fecha_de_inicio_del_contrato))}
-      ${dato("Fecha de terminación", fecha(c.fecha_de_fin_del_contrato))}
-      ${dato("Días adicionados", c.dias_adicionados)}
-      ${dato("Estado reportado en SECOP", c.estado_contrato)}
-      ${dato("Identificador SECOP", c.id_contrato)}
+      ${c.pagado != null ? dato("Valor pagado reportado", `${pesos(c.pagado)} (${porcentaje(c.pagado, c.valor)})`) : ""}
+      ${dato("Fecha de firma", fecha(c.firma))}
+      ${dato("Fecha de inicio", fecha(c.inicio))}
+      ${dato("Fecha de terminación", fecha(c.fin))}
+      ${c.diasAdicionados != null ? dato("Días adicionados", c.diasAdicionados) : ""}
+      ${dato("Estado reportado", c.estadoOriginal)}
     </div>
-    ${c.url ? `<a class="ficha-enlace" href="${escapar(c.url)}" target="_blank" rel="noopener">Ver registro oficial en SECOP ↗</a>` : ""}
-  `;
+    <p id="fichaEnlace" class="ficha-enlace-zona">${c.url ? enlaceSecop(c.url) : "Buscando enlace oficial…"}</p>`;
   $("ficha").showModal();
-}
 
-// ===== 9. EXPORTAR E IMPRIMIR =====
-
-function descargarExcel() {
-  if (typeof XLSX === "undefined") {
-    alert("No se pudo cargar la herramienta de Excel. Revisa tu conexión.");
-    return;
+  // El enlace a SECOP se pide solo cuando se abre la ficha (así la tabla carga más rápido)
+  if (!c.url && c.origen === "SECOP II") {
+    try {
+      const [r] = await secop2({ $select: "urlproceso", $where: `id_contrato = ${literal(c.id)}`, $limit: 1 });
+      c.url = r?.urlproceso?.url || "";
+    } catch { /* sin enlace */ }
+    if ($("fichaEnlace")) $("fichaEnlace").innerHTML = c.url ? enlaceSecop(c.url) : "No se encontró el enlace en SECOP.";
   }
-  const filas = app.filtrados.map(c => ({
-    "Identificador SECOP": c.id_contrato,
-    "Número de contrato": c.referencia_del_contrato,
-    "Fecha de firma": fecha(c.fecha_de_firma),
-    "Fecha de inicio": fecha(c.fecha_de_inicio_del_contrato),
-    "Fecha de terminación": fecha(c.fecha_de_fin_del_contrato),
-    "Entidad": c.entidad,
-    "Contratista": c.contratista,
-    "Tipo de contratista": c.tipo,
-    "Objeto": c.objeto_del_contrato,
-    "Tipo de contrato": c.tipo_de_contrato,
-    "Modalidad": c.modalidad,
-    "Estado": c.estado,
-    "Valor": c.valor,
-    "Enlace SECOP": c.url
-  }));
-
-  const hoja = XLSX.utils.json_to_sheet(filas);
-  const libro = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(libro, hoja, "Contratos");
-
-  const nota = XLSX.utils.aoa_to_sheet([
-    ["Fuente", "SECOP II - datos.gov.co (conjunto jbjy-vk9h)"],
-    ["Consulta", app.consultadoEn ? app.consultadoEn.toLocaleString("es-CO") : ""],
-    ["Año", $("anio").value],
-    ["Contratos en el archivo", filas.length],
-    ["Aviso", "Iniciativa ciudadana. Cifras indicativas según lo reportado por las entidades en SECOP II."]
-  ]);
-  XLSX.utils.book_append_sheet(libro, nota, "Fuente");
-
-  XLSX.writeFile(libro, `contratos-barrancabermeja-${$("anio").value}-${new Date().toISOString().slice(0, 10)}.xlsx`);
 }
 
-// ===== 10. ARRANQUE =====
+const enlaceSecop = url => /^https?:\/\//.test(url)
+  ? `<a class="ficha-enlace" href="${escapar(url)}" target="_blank" rel="noopener">Ver registro oficial en SECOP ↗</a>` : "";
+
+// ===== 12. EXPORTAR Y ARRANQUE =====
+
+async function descargarExcel() {
+  if (typeof XLSX === "undefined") { alert("No se pudo cargar la herramienta de Excel. Revisa tu conexión."); return; }
+  const boton = $("btnExcel");
+  boton.disabled = true;
+  boton.textContent = "Preparando Excel…";
+  try {
+    const orden = $("ordenContratos").value === "valor" ? "valor_del_contrato DESC" : "fecha_de_firma DESC";
+    const datos = (await secop2({ $select: CAMPOS.join(","), $where: condicionCompleta(), $order: orden, $limit: 50000 })).map(prepararSecop2);
+    const filas = datos.map(c => ({
+      "Identificador SECOP": c.id, "Número de contrato": c.referencia,
+      "Fecha de firma": fecha(c.firma), "Fecha de inicio": fecha(c.inicio), "Fecha de terminación": fecha(c.fin),
+      "Entidad": c.entidad, "Contratista": c.contratista, "Tipo de contratista": c.tipo,
+      "Objeto": c.objeto, "Tipo de contrato": c.tipoContrato, "Modalidad": c.modalidad,
+      "Estado": c.estado, "Valor": c.valor, "Valor pagado reportado": c.pagado
+    }));
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filas), "Contratos");
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.aoa_to_sheet([
+      ["Fuente", "SECOP II - datos.gov.co (conjunto jbjy-vk9h)"],
+      ["Consulta", new Date().toLocaleString("es-CO")],
+      ["Periodo", $("anio").value || "Todos los años"],
+      ["Contratos en el archivo", filas.length],
+      ["Elaborado con", "Transparencia Barrancabermeja · Iván Rodríguez, Edil de la Comuna 5"],
+      ["Aviso", "Iniciativa ciudadana. Cifras indicativas según lo reportado por las entidades en SECOP II."]
+    ]), "Fuente");
+    XLSX.writeFile(libro, `contratos-barrancabermeja-${$("anio").value || "todos"}-${hoyISO()}.xlsx`);
+  } catch (error) {
+    console.error(error);
+    alert("No se pudo preparar el Excel. Intenta de nuevo o pon más filtros.");
+  } finally {
+    boton.disabled = false;
+    boton.textContent = "Descargar Excel";
+  }
+}
 
 function iniciar() {
-  // Años disponibles: del actual hacia atrás
-  const actual = new Date().getFullYear();
-  for (let a = actual; a >= 2021; a--) $("anio").add(new Option(a, a));
+  $("anio").add(new Option("Todos los años", ""));
+  for (let a = new Date().getFullYear(); a >= PRIMER_ANIO; a--) $("anio").add(new Option(a, a));
 
-  // Eventos de filtros
-  let pausa;
-  $("buscador").addEventListener("input", () => { clearTimeout(pausa); pausa = setTimeout(aplicarFiltros, 250); });
-  ["filtroEntidad", "filtroModalidad", "filtroEstado", "filtroTipo"].forEach(id => $(id).addEventListener("change", aplicarFiltros));
+  // Pestañas y enlaces internos
+  document.querySelectorAll(".pestana-btn").forEach(b => b.addEventListener("click", () => irA(b.dataset.tab)));
+  document.addEventListener("click", e => {
+    const enlace = e.target.closest("[data-ir]");
+    if (enlace) irA(enlace.dataset.ir);
+  });
+
+  // Filtros
+  $("buscador").addEventListener("input", aplicarFiltros);
+  ["filtroEntidad", "filtroModalidad", "filtroEstado", "filtroTipo", "anio"].forEach(id => $(id).addEventListener("change", aplicarFiltros));
   $("btnLimpiar").addEventListener("click", limpiarFiltros);
-  $("anio").addEventListener("change", cargar);
+  $("btnQuitarVista").addEventListener("click", () => { app.vista = null; aplicarFiltros(); });
+  $("ordenContratos").addEventListener("change", () => pintarContratos(true));
 
   // Botones
   $("btnExcel").addEventListener("click", descargarExcel);
   $("btnImprimir").addEventListener("click", () => window.print());
-  $("btnMas").addEventListener("click", () => { app.filasVisibles += FILAS_TABLA; pintarContratos(); });
+  $("btnMas").addEventListener("click", () => pintarContratos(false));
   $("btnCerrarFicha").addEventListener("click", () => $("ficha").close());
+  $("formBuscar").addEventListener("submit", buscarEnSecop);
 
-  // Clics en las tablas
-  $("tablaEntidades").addEventListener("click", e => {
-    const fila = e.target.closest("tr[data-entidad]");
-    if (!fila) return;
-    $("filtroEntidad").value = fila.dataset.entidad;
+  // Buscador grande de la portada: detecta solo si escribiste un número o un nombre
+  $("formPortada").addEventListener("submit", e => {
+    e.preventDefault();
+    const texto = $("textoPortada").value.trim();
+    const soloNumeros = /^[\d.\s]+$/.test(texto) || /^[\d.]{9,11}-\d$/.test(texto); // cédula, o NIT con dígito de verificación
+    const pareceContrato = /\d/.test(texto) && texto.length < 30;
+    $("tipoBusqueda").value = soloNumeros ? "documento" : pareceContrato ? "contrato" : "nombre";
+    $("textoBusqueda").value = texto;
+    $("alcanceBusqueda").value = "barranca";
+    irA("buscar");
+    $("formBuscar").requestSubmit();
+  });
+  $("tipoBusqueda").addEventListener("change", () => {
+    const ejemplos = { nombre: "Ej: Aseos y Servicios de Colombia", documento: "Ej: 900346265 (solo números)",
+                       contrato: "Ej: 5361-26", objeto: "Ej: pavimentación" };
+    $("textoBusqueda").placeholder = ejemplos[$("tipoBusqueda").value];
+  });
+
+  // Clics en tarjetas y tablas
+  $("listaAlertas").addEventListener("click", e => {
+    const t = e.target.closest("[data-alerta]");
+    if (!t) return;
+    app.vista = t.dataset.alerta;
     aplicarFiltros();
-    $("contratos").scrollIntoView();
+    irA("contratos");
+  });
+  $("tarjetasEntidades").addEventListener("click", e => {
+    const t = e.target.closest("[data-entidad]");
+    if (!t) return;
+    $("filtroEntidad").value = t.dataset.entidad;
+    aplicarFiltros();
+    irA("contratos");
   });
   $("tablaContratistas").addEventListener("click", e => {
-    const fila = e.target.closest("tr[data-contratista]");
-    if (!fila) return;
-    $("buscador").value = fila.dataset.contratista;
+    const f = e.target.closest("tr[data-contratista]");
+    if (!f) return;
+    $("buscador").value = f.dataset.contratista;
     aplicarFiltros();
-    $("contratos").scrollIntoView();
+    irA("contratos");
   });
-  $("tablaContratos").addEventListener("click", e => {
-    const fila = e.target.closest("tr[data-id]");
-    if (fila) abrirFicha(fila.dataset.id);
+  $("tarjetasSecretarias").addEventListener("click", e => {
+    const t = e.target.closest("[data-secretaria]");
+    if (t) verSecretaria(Number(t.dataset.secretaria));
   });
+  $("detalleSecretaria").addEventListener("click", e => {
+    if (e.target.id === "btnCerrarSecretaria") { $("detalleSecretaria").hidden = true; return; }
+    const contrato = e.target.closest("tr[data-id]");
+    if (contrato) { abrirFicha(contrato.dataset.id); return; }
+    const contratista = e.target.closest("tr[data-contratista]");
+    if (contratista) {
+      limpiarFiltrosSinCargar();
+      $("filtroEntidad").value = "ALCALDIA DISTRITAL BARRANCABERMEJA";
+      $("buscador").value = contratista.dataset.contratista;
+      aplicarFiltros();
+      irA("contratos");
+    }
+  });
+  ["tablaContratos", "tablaResultados"].forEach(id => $(id).addEventListener("click", e => {
+    const f = e.target.closest("tr[data-id]");
+    if (f) abrirFicha(f.dataset.id);
+  }));
 
-  cargar();
+  // Abrir la pestaña que venga en el enlace (por ejemplo …vercel.app/#buscar)
+  const inicial = location.hash.replace("#", "");
+  if (document.querySelector(`.pestana[data-tab="${inicial}"]`)) irA(inicial);
+
+  cargarTablero();
+  cargarAlertas();
+  pintarSecretarias();
 }
 
 iniciar();
