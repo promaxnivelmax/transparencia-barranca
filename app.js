@@ -38,7 +38,7 @@ const CAMPOS = [
   "id_contrato", "referencia_del_contrato", "nombre_entidad", "proveedor_adjudicado",
   "tipodocproveedor", "valor_del_contrato", "valor_pagado", "fecha_de_firma",
   "fecha_de_inicio_del_contrato", "fecha_de_fin_del_contrato", "objeto_del_contrato",
-  "modalidad_de_contratacion", "tipo_de_contrato", "estado_contrato", "dias_adicionados"
+  "modalidad_de_contratacion", "tipo_de_contrato", "estado_contrato", "dias_adicionados", "urlproceso"
 ];
 
 const CAMPOS_INTEGRADO = [
@@ -185,8 +185,8 @@ async function guardarMemoria(clave, valor) {
 let promesaResumen = null;
 function cargarResumen() {
   if (!promesaResumen) {
-    const version = Math.floor(Date.now() / 3600e3); // evita usar una copia vieja de más de una hora
-    promesaResumen = fetch(`datos/resumen.json?v=${version}`)
+    // Misma dirección que el «preload» del index.html: el navegador ya la empezó a descargar
+    promesaResumen = fetch("datos/resumen.json", { cache: "no-cache" })
       .then(r => r.ok ? r.json() : null)
       .then(d => (app.resumen = d))
       .catch(() => null);
@@ -409,6 +409,7 @@ function irA(pestana) {
   document.querySelectorAll(".pestana-btn").forEach(b => b.classList.toggle("activa", b.dataset.tab === pestana));
   $("barraFiltros").classList.toggle("oculto", ["buscar", "metodologia"].includes(pestana));
   if (pestana === "inicio") Object.values(app.graficos).forEach(g => g.resize());
+  if (pestana === "secretarias") pintarSecretarias();
 
   const limite = document.querySelector(".intro").getBoundingClientRect().bottom + window.scrollY - 70;
   if (window.scrollY > limite) window.scrollTo({ top: limite, behavior: "smooth" });
@@ -525,7 +526,7 @@ function sumarPor(lista, clasificar) {
 }
 
 function pintarGraficos(d) {
-  if (typeof Chart === "undefined") return;
+  if (typeof Chart === "undefined") return; // con «defer», Chart.js ya está listo cuando corre este archivo
   Chart.defaults.color = color("--texto-suave");
   Chart.defaults.borderColor = "rgba(255,255,255,0.08)";
   Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
@@ -630,14 +631,19 @@ function pintarContratistas(d) {
 }
 
 // Secretarías y dependencias de la Alcaldía (vienen del resumen diario)
+let promesaSecretarias = null;
 async function pintarSecretarias() {
-  await cargarResumen();
-  const s = app.resumen?.secretarias;
+  if (!promesaSecretarias) {
+    promesaSecretarias = fetch("datos/secretarias.json", { cache: "no-cache" })
+      .then(r => r.ok ? r.json() : null).catch(() => null);
+  }
+  const s = await promesaSecretarias;
+  app.secretarias = s;
   if (!s) { $("tarjetasSecretarias").innerHTML = "<p>Todavía no hay datos de secretarías. Se generan con la actualización diaria.</p>"; return; }
 
   $("notaSecretarias").textContent =
     `${numero(s.total)} contratos de la Alcaldía en SECOP II, de todos los años, repartidos en ${s.unidades.length} secretarías y dependencias. ` +
-    `Datos del ${new Date(app.resumen.fecha).toLocaleDateString("es-CO")}. Haz clic en una para ver con quién contrata.`;
+    `Datos del ${new Date(s.fecha).toLocaleDateString("es-CO")}. Haz clic en una para ver con quién contrata.`;
 
   $("tarjetasSecretarias").innerHTML = s.unidades.map((u, i) => `
     <button class="tarjeta-entidad" data-secretaria="${i}">
@@ -652,16 +658,17 @@ async function pintarSecretarias() {
 }
 
 function verSecretaria(i) {
-  const u = app.resumen.secretarias.unidades[i];
+  const u = app.secretarias.unidades[i];
   const filaCorta = c => `
     <tr class="clic" data-id="${escapar(c.id)}">
       <td>${escapar(c.f)}</td><td>${escapar(c.ref)}</td><td>${escapar(c.prov)}</td>
       <td class="objeto">${escapar(recortar(c.obj, 90))}</td>
       <td><span class="etiqueta ${claseEstado(clasificarEstado(c.est))}">${escapar(clasificarEstado(c.est))}</span></td>
       <td class="valor">${pesos(c.v)}</td>
+      <td>${c.u ? botonSecop(c.u) : `<button class="boton-secop" data-abrir-secop="${escapar(c.id)}">Ver en SECOP ↗</button>`}</td>
     </tr>`;
   const tabla = filas => `<div class="tabla-contenedor"><table>
-      <thead><tr><th>Firma</th><th>Contrato</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Valor</th></tr></thead>
+      <thead><tr><th>Firma</th><th>Contrato</th><th>Contratista</th><th>Objeto</th><th>Estado</th><th>Valor</th><th>Página oficial</th></tr></thead>
       <tbody>${filas.map(filaCorta).join("")}</tbody></table></div>`;
 
   $("detalleSecretaria").hidden = false;
@@ -731,7 +738,7 @@ function prepararSecop2(c) {
     estadoOriginal: c.estado_contrato || "",
     diasAdicionados: c.dias_adicionados || "0",
     origen: "SECOP II",
-    url: ""
+    url: c.urlproceso?.url || ""
   };
 }
 
@@ -746,6 +753,7 @@ function filaContrato(c, conOrigen = false) {
       <td><span class="etiqueta ${claseEstado(c.estado)}">${escapar(c.estado)}</span></td>
       ${conOrigen ? `<td><span class="etiqueta">${escapar(c.origen)}</span></td>` : ""}
       <td class="valor">${pesos(c.valor)}</td>
+      <td>${botonSecop(c.url)}</td>
     </tr>`;
 }
 
@@ -754,7 +762,7 @@ async function pintarContratos(desdeCero) {
   const turno = desdeCero ? ++turnoTabla : turnoTabla;
   if (desdeCero) {
     app.filas = [];
-    $("tablaContratos").innerHTML = `<tr><td colspan="7">Cargando contratos…</td></tr>`;
+    $("tablaContratos").innerHTML = `<tr><td colspan="8">Cargando contratos…</td></tr>`;
     $("contador").textContent = "Cargando…";
   }
   const orden = $("ordenContratos").value === "valor" ? "valor_del_contrato DESC" : "fecha_de_firma DESC";
@@ -792,7 +800,7 @@ async function pintarContratos(desdeCero) {
     const total = Number(app.conteoTabla?.n) || 0;
     $("contador").textContent = `${numero(total)} contratos · ${pesos(app.conteoTabla?.v)} · mostrando ${numero(app.filas.length)}`;
     $("tablaContratos").innerHTML = app.filas.map(c => filaContrato(c)).join("") ||
-      `<tr><td colspan="7">No hay contratos con estos filtros.</td></tr>`;
+      `<tr><td colspan="8">No hay contratos con estos filtros.</td></tr>`;
     $("btnMas").style.display = total > app.filas.length ? "block" : "none";
   } catch (error) {
     console.error(error);
@@ -952,17 +960,51 @@ async function abrirFicha(id) {
   }
 }
 
+// Botón pequeño para abrir el contrato en la página oficial de SECOP
+const botonSecop = url => /^https?:\/\//.test(url || "")
+  ? `<a class="boton-secop" href="${escapar(url)}" target="_blank" rel="noopener" title="Abrir en la página oficial de SECOP">Ver en SECOP ↗</a>`
+  : `<span class="nota-pequena">—</span>`;
+
 const enlaceSecop = url => /^https?:\/\//.test(url)
   ? `<a class="ficha-enlace" href="${escapar(url)}" target="_blank" rel="noopener">Ver registro oficial en SECOP ↗</a>` : "";
 
+// Abre un contrato en SECOP cuando el enlace todavía no se conoce (lo busca primero)
+async function abrirEnSecop(id, boton) {
+  const ventana = window.open("", "_blank"); // se abre ya para que el navegador no la bloquee
+  boton.textContent = "Abriendo…";
+  try {
+    const [r] = await secop2({ $select: "urlproceso", $where: `id_contrato = ${literal(id)}`, $limit: 1 });
+    const url = r?.urlproceso?.url;
+    if (url && /^https?:\/\//.test(url)) { if (ventana) ventana.location = url; else window.open(url, "_blank"); }
+    else { if (ventana) ventana.close(); alert("No se encontró el enlace de este contrato en SECOP."); }
+  } catch {
+    if (ventana) ventana.close();
+    alert("SECOP no respondió. Intenta de nuevo.");
+  } finally {
+    boton.textContent = "Ver en SECOP ↗";
+  }
+}
+
 // ===== 12. EXPORTAR Y ARRANQUE =====
 
+// La herramienta de Excel (casi 1 MB) solo se descarga cuando alguien la necesita
+function cargarHerramientaExcel() {
+  if (typeof XLSX !== "undefined") return Promise.resolve();
+  return new Promise((ok, falla) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js";
+    script.onload = ok;
+    script.onerror = () => falla(new Error("No se pudo cargar la herramienta de Excel"));
+    document.head.appendChild(script);
+  });
+}
+
 async function descargarExcel() {
-  if (typeof XLSX === "undefined") { alert("No se pudo cargar la herramienta de Excel. Revisa tu conexión."); return; }
   const boton = $("btnExcel");
   boton.disabled = true;
   boton.textContent = "Preparando Excel…";
   try {
+    await cargarHerramientaExcel();
     const orden = $("ordenContratos").value === "valor" ? "valor_del_contrato DESC" : "fecha_de_firma DESC";
     const datos = (await secop2({ $select: CAMPOS.join(","), $where: condicionCompleta(), $order: orden, $limit: 50000 })).map(prepararSecop2);
     const filas = datos.map(c => ({
@@ -970,7 +1012,8 @@ async function descargarExcel() {
       "Fecha de firma": fecha(c.firma), "Fecha de inicio": fecha(c.inicio), "Fecha de terminación": fecha(c.fin),
       "Entidad": c.entidad, "Contratista": c.contratista, "Tipo de contratista": c.tipo,
       "Objeto": c.objeto, "Tipo de contrato": c.tipoContrato, "Modalidad": c.modalidad,
-      "Estado": c.estado, "Valor": c.valor, "Valor pagado reportado": c.pagado
+      "Estado": c.estado, "Valor": c.valor, "Valor pagado reportado": c.pagado,
+      "Enlace SECOP": c.url
     }));
     const libro = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filas), "Contratos");
@@ -1063,6 +1106,9 @@ function iniciar() {
   });
   $("detalleSecretaria").addEventListener("click", e => {
     if (e.target.id === "btnCerrarSecretaria") { $("detalleSecretaria").hidden = true; return; }
+    if (e.target.closest("a")) return;
+    const abrir = e.target.closest("[data-abrir-secop]");
+    if (abrir) { abrirEnSecop(abrir.dataset.abrirSecop, abrir); return; }
     const contrato = e.target.closest("tr[data-id]");
     if (contrato) { abrirFicha(contrato.dataset.id); return; }
     const contratista = e.target.closest("tr[data-contratista]");
@@ -1075,6 +1121,7 @@ function iniciar() {
     }
   });
   ["tablaContratos", "tablaResultados"].forEach(id => $(id).addEventListener("click", e => {
+    if (e.target.closest("a")) return; // el botón «Ver en SECOP» abre la página oficial, no la ficha
     const f = e.target.closest("tr[data-id]");
     if (f) abrirFicha(f.dataset.id);
   }));
@@ -1085,7 +1132,6 @@ function iniciar() {
 
   cargarTablero();
   cargarAlertas();
-  pintarSecretarias();
 }
 
 iniciar();

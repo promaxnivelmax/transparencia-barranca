@@ -84,13 +84,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; }
 /* ----- Presentación ----- */
 .intro {
   margin-top: 18px; padding: 30px;
-  display: grid; grid-template-columns: 1.4fr 1fr; gap: 20px; align-items: center;
+  display: grid; grid-template-columns: 1fr 1.15fr; gap: 24px; align-items: center;
+  overflow: hidden;
 }
 .intro h1 { font-size: clamp(26px, 4vw, 40px); line-height: 1.15; }
 .intro-texto > p { color: var(--texto-suave); margin-top: 10px; }
 .sobretitulo { color: var(--dorado) !important; font-size: 13px; text-transform: uppercase; letter-spacing: 1.5px; margin: 0 0 8px !important; }
 .gancho { color: var(--texto) !important; }
-.silueta { width: 100%; height: auto; max-height: 220px; }
+.silueta { width: 100%; height: auto; border-radius: 16px; display: block; }
 .controles-anio { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
 .estado-carga { font-size: 13px; color: var(--dorado); }
 .autor {
@@ -310,7 +311,7 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); 
 
 @media (max-width: 980px) {
   .intro { grid-template-columns: 1fr; }
-  .silueta { max-height: 150px; }
+  .silueta { order: -1; }
   .form-buscar { grid-template-columns: 1fr 1fr; }
   .form-buscar input { grid-column: 1 / -1; order: -1; }
 }
@@ -335,3 +336,28 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); 
 .detalle-columnas h3 { font-size: 15px; margin: 8px 0; }
 .nota-pequena { font-size: 12px; color: var(--texto-suave); }
 @media (max-width: 900px) { .detalle-columnas { grid-template-columns: 1fr; } }
+
+/* ----- Buscador grande ----- */
+.buscador-grande {
+  display: flex; gap: 8px; margin-top: 16px; padding: 6px;
+  background: rgba(0,0,0,0.3); border: 1px solid var(--borde-vidrio); border-radius: 18px;
+}
+.buscador-grande input { flex: 1; border: none; background: transparent; font-size: 18px; padding: 14px 16px; }
+.buscador-grande input:focus { outline: none; }
+.buscador-grande:focus-within { outline: 2px solid var(--dorado); }
+.buscador-grande button { font-size: 17px; padding: 14px 22px; border-radius: 14px; }
+.form-buscar input, .form-buscar select { font-size: 17px; padding: 16px 18px; border-radius: 14px; }
+.form-buscar button { font-size: 17px; padding: 16px 28px; border-radius: 14px; }
+@media (max-width: 640px) {
+  .buscador-grande { flex-direction: column; }
+  .buscador-grande button { width: 100%; }
+}
+
+/* ----- Botón «Ver en SECOP» ----- */
+.boton-secop {
+  display: inline-block; white-space: nowrap; font-size: 12px; font-weight: 700;
+  padding: 6px 10px; border-radius: 10px; text-decoration: none;
+  color: #062a1c; background: var(--dorado); border: none;
+}
+.boton-secop:hover { filter: brightness(1.1); transform: none; }
+@media print { .boton-secop { display: none; } }

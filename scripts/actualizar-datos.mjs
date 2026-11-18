@@ -76,7 +76,7 @@ async function resumenTablero() {
     contratistas: { $select: `proveedor_adjudicado as k, max(tipodocproveedor) as doc, count(id_contrato) as n, sum(valor_del_contrato) as v, ${sumaSi("estado_contrato = 'En ejecución'", "ej")}, count(distinct nombre_entidad) as e`,
                     $where: w, $group: "proveedor_adjudicado", $order: "v DESC", $limit: 50 }
   };
-  consultas.tabla = { $select: "id_contrato, referencia_del_contrato, nombre_entidad, proveedor_adjudicado, tipodocproveedor, valor_del_contrato, valor_pagado, fecha_de_firma, fecha_de_inicio_del_contrato, fecha_de_fin_del_contrato, objeto_del_contrato, modalidad_de_contratacion, tipo_de_contrato, estado_contrato, dias_adicionados",
+  consultas.tabla = { $select: "id_contrato, referencia_del_contrato, nombre_entidad, proveedor_adjudicado, tipodocproveedor, valor_del_contrato, valor_pagado, fecha_de_firma, fecha_de_inicio_del_contrato, fecha_de_fin_del_contrato, objeto_del_contrato, modalidad_de_contratacion, tipo_de_contrato, estado_contrato, dias_adicionados, urlproceso",
                       $where: `${w} AND fecha_de_firma IS NOT NULL`, $order: "fecha_de_firma DESC, id_contrato", $limit: 100 };
   consultas.tablaConteo = { $select: "count(id_contrato) as n, sum(valor_del_contrato) as v", $where: `${w} AND fecha_de_firma IS NOT NULL` };
   const datos = {};
@@ -138,7 +138,7 @@ async function resumenSecretarias() {
 
   console.log("  Descargando contratos de la Alcaldía…");
   const contratos = await descargarTodo(API_CONTRATOS, {
-    $select: "id_contrato, referencia_del_contrato, proceso_de_compra, proveedor_adjudicado, tipodocproveedor, valor_del_contrato, estado_contrato, modalidad_de_contratacion, fecha_de_firma, objeto_del_contrato",
+    $select: "id_contrato, referencia_del_contrato, proceso_de_compra, proveedor_adjudicado, tipodocproveedor, valor_del_contrato, estado_contrato, modalidad_de_contratacion, fecha_de_firma, objeto_del_contrato, urlproceso",
     $where: `nit_entidad = '${NIT_ALCALDIA}'`
   });
   console.log(`  ${contratos.length} contratos`);
@@ -168,7 +168,8 @@ async function resumenSecretarias() {
     u.contratos.push({
       id: c.id_contrato, ref: c.referencia_del_contrato || c.id_contrato, prov, v: valor,
       f: (c.fecha_de_firma || "").slice(0, 10), est: c.estado_contrato || "",
-      obj: (c.objeto_del_contrato || "").slice(0, 140)
+      obj: (c.objeto_del_contrato || "").slice(0, 140),
+      u: c.urlproceso?.url || ""
     });
   }
 
@@ -197,5 +198,9 @@ console.log("3/3 Secretarías de la Alcaldía");
 const secretarias = await resumenSecretarias();
 
 await mkdir("datos", { recursive: true });
-await writeFile("datos/resumen.json", JSON.stringify({ fecha: Date.now(), tablero, alertas, secretarias }));
+const fecha = Date.now();
+// El resumen principal va liviano para que la página cargue rapidísimo;
+// las secretarías van aparte y solo se descargan al abrir esa pestaña.
+await writeFile("datos/resumen.json", JSON.stringify({ fecha, tablero, alertas }));
+await writeFile("datos/secretarias.json", JSON.stringify({ fecha, ...secretarias }));
 console.log("Listo: datos/resumen.json");
