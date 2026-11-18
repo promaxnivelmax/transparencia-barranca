@@ -4,13 +4,34 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Transparencia Barrancabermeja</title>
+  <link rel="stylesheet" href="estilos.css">
 </head>
 <body>
-  <h1>Transparencia Barrancabermeja</h1>
-  <p>Contratos firmados en 2026</p>
+  <header>
+    <h1>📊 Transparencia Barrancabermeja</h1>
+    <p class="subtitulo">Contratos públicos firmados en 2026 · Iniciativa ciudadana · Fuente: SECOP II (datos.gov.co)</p>
+  </header>
 
-  <p>Número de contratos: <strong id="numContratos">Cargando...</strong></p>
-  <p>Total contratado: <strong id="totalContratado">Cargando...</strong></p>
+  <main>
+    <section class="kpis">
+      <div class="kpi">
+        <span class="kpi-titulo">Contratos firmados</span>
+        <strong id="numContratos">...</strong>
+      </div>
+      <div class="kpi">
+        <span class="kpi-titulo">Total contratado</span>
+        <strong id="totalContratado">...</strong>
+      </div>
+      <div class="kpi">
+        <span class="kpi-titulo">Contratación directa</span>
+        <strong id="porcentajeDirecta">...</strong>
+      </div>
+      <div class="kpi">
+        <span class="kpi-titulo">Contratista con más plata</span>
+        <strong id="topContratista">...</strong>
+      </div>
+    </section>
+  </main>
 
   <script src="app.js"></script>
 </body>
