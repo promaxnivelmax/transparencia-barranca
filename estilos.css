@@ -236,7 +236,9 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); 
   .filtros input { grid-column: 1 / -1; }
 }
 @media (max-width: 640px) {
-  .cabecera { position: static; }
+  .cabecera { top: 0; margin-top: 0; width: 100%; border-radius: 0 0 18px 18px; padding: 10px 12px; gap: 8px; }
+  .marca small { display: none; }
+  .logo { width: 30px; height: 30px; }
   .menu { width: 100%; overflow-x: auto; flex-wrap: nowrap; }
   .filtros { grid-template-columns: 1fr; }
   .graficos { grid-template-columns: 1fr; }
@@ -361,3 +363,29 @@ dialog::backdrop { background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(4px); 
 }
 .boton-secop:hover { filter: brightness(1.1); transform: none; }
 @media print { .boton-secop { display: none; } }
+
+/* ----- Perfil del contratista ----- */
+dialog.perfil { width: min(980px, 96vw); }
+.perfil h2 { font-size: 22px; margin: 6px 40px 4px 0; }
+.perfil h3 { font-size: 15px; margin: 18px 0 8px; }
+.perfil .acciones { margin-top: 12px; }
+.enlace-contratista { background: none; border: none; padding: 0; color: inherit; font-weight: 600; text-align: left;
+  text-decoration: underline dotted; text-underline-offset: 3px; cursor: pointer; font-size: inherit; }
+.enlace-contratista:hover { color: var(--dorado); transform: none; }
+
+/* ----- Navegación por pestañas ----- */
+body:not([data-pestana="inicio"]) .intro { display: none; }
+main { min-height: 70vh; }
+.pestana-btn { scroll-snap-align: start; }
+.menu { scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+@media (max-width: 640px) {
+  main { padding: 0 12px 30px; }
+  .bloque { padding: 14px; }
+  .intro h1 { font-size: 24px; }
+  .kpis { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .kpi { padding: 14px; }
+  .kpi strong { font-size: 18px; }
+  .tarjetas-entidades, .alertas { grid-template-columns: 1fr; }
+  table { font-size: 12.5px; }
+  dialog { padding: 18px; width: 100vw; max-height: 92vh; }
+}
