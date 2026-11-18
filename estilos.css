@@ -39,3 +39,24 @@ h1 { font-size: 32px; color: #f8fafc; }
 }
 
 .kpi strong { font-size: 26px; color: #38bdf8; word-break: break-word; }
+.graficos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.tarjeta-grafico {
+  background: #111827;
+  border: 1px solid #1f2a44;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.tarjeta-grafico.grande { grid-column: 1 / -1; }
+
+.tarjeta-grafico h2 {
+  font-size: 15px;
+  color: #cbd5e1;
+  margin-bottom: 16px;
+}
