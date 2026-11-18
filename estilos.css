@@ -87,6 +87,14 @@ main { max-width: 1200px; margin: 0 auto; padding: 0 20px 40px; }
 .intro > p { color: var(--texto-suave); max-width: 640px; margin: 12px auto 0; }
 .controles-anio { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 22px; flex-wrap: wrap; }
 .estado-carga { font-size: 13px; color: var(--dorado); }
+.autor {
+  display: inline-block; margin-top: 18px !important; padding: 8px 16px;
+  border-radius: 999px; font-size: 14px; color: var(--texto) !important;
+  background: var(--vidrio-fuerte); border: 1px solid var(--borde-vidrio);
+}
+.autor strong { color: var(--dorado); }
+.pie p + p { margin-top: 4px; font-size: 12px; opacity: 0.8; }
+.pie strong { color: var(--dorado); }
 .aviso { font-size: 12px; margin-top: 14px !important; color: var(--texto-suave); opacity: 0.85; }
 
 /* ----- Controles de formulario ----- */
