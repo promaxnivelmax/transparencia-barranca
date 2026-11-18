@@ -46,6 +46,36 @@
         <canvas id="graficoMeses"></canvas>
       </div>
     </section>
+
+<!-- TABLA CON BUSCADOR -->
+
+        <section class="tabla-seccion">
+      <h2>🔎 Buscar contratos</h2>
+
+      <div class="filtros">
+        <input type="text" id="buscador" placeholder="Busca por contratista, entidad u objeto...">
+        <select id="filtroEntidad"><option value="">Todas las entidades</option></select>
+        <select id="filtroModalidad"><option value="">Todas las modalidades</option></select>
+      </div>
+
+      <p id="contador" class="contador"></p>
+
+      <div class="tabla-contenedor">
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Entidad</th>
+              <th>Contratista</th>
+              <th>Objeto</th>
+              <th>Valor</th>
+              <th>SECOP</th>
+            </tr>
+          </thead>
+          <tbody id="cuerpoTabla"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="app.js"></script>

@@ -1,3 +1,4 @@
+let todosLosContratos = [];
 const URL_API = "https://www.datos.gov.co/resource/jbjy-vk9h.json";
 
 function aPesos(valor) {
@@ -35,9 +36,17 @@ async function cargarContratos() {
   });
   const [nombreTop, valorTop] = Object.entries(porContratista).sort((a, b) => b[1] - a[1])[0];
   document.getElementById("topContratista").textContent = `${nombreTop} (${aPesos(valorTop)})`;
-}
+
+  // 5. Gráficos y tabla (AHORA SÍ, DENTRO de la función)
   dibujarGraficos(contratos);
-  function agruparYSumar(contratos, campo) {
+  todosLosContratos = contratos;
+  llenarFiltros(contratos);
+  aplicarFiltros();
+}
+
+// ===== GRÁFICOS =====
+
+function agruparYSumar(contratos, campo) {
   const grupos = {};
   contratos.forEach(c => {
     const clave = c[campo] || "Sin dato";
@@ -65,7 +74,7 @@ function dibujarGraficos(contratos) {
     options: { indexAxis: "y", plugins: { legend: { display: false } } }
   });
 
-  // Gráfico 2: Modalidades (cantidad de contratos)
+  // Gráfico 2: Modalidades
   const modalidades = {};
   contratos.forEach(c => {
     const m = c.modalidad_de_contratacion || "Sin dato";
@@ -104,4 +113,57 @@ function dibujarGraficos(contratos) {
     options: { plugins: { legend: { display: false } } }
   });
 }
+
+// ===== TABLA Y FILTROS =====
+
+function escapar(texto) {
+  const div = document.createElement("div");
+  div.textContent = texto || "";
+  return div.innerHTML;
+}
+
+function llenarFiltros(contratos) {
+  const entidades = [...new Set(contratos.map(c => c.nombre_entidad))].sort();
+  const modalidades = [...new Set(contratos.map(c => c.modalidad_de_contratacion))].sort();
+
+  entidades.forEach(e => document.getElementById("filtroEntidad").add(new Option(e, e)));
+  modalidades.forEach(m => document.getElementById("filtroModalidad").add(new Option(m, m)));
+}
+
+function aplicarFiltros() {
+  const texto = document.getElementById("buscador").value.toLowerCase();
+  const entidad = document.getElementById("filtroEntidad").value;
+  const modalidad = document.getElementById("filtroModalidad").value;
+
+  const filtrados = todosLosContratos.filter(c => {
+    const coincideTexto =
+      (c.proveedor_adjudicado || "").toLowerCase().includes(texto) ||
+      (c.nombre_entidad || "").toLowerCase().includes(texto) ||
+      (c.objeto_del_contrato || "").toLowerCase().includes(texto);
+    const coincideEntidad = !entidad || c.nombre_entidad === entidad;
+    const coincideModalidad = !modalidad || c.modalidad_de_contratacion === modalidad;
+    return coincideTexto && coincideEntidad && coincideModalidad;
+  });
+
+  const totalFiltrado = filtrados.reduce((s, c) => s + Number(c.valor_del_contrato), 0);
+  document.getElementById("contador").textContent =
+    `${filtrados.length.toLocaleString("es-CO")} contratos encontrados · ${aPesos(totalFiltrado)} · mostrando los primeros 100`;
+
+  document.getElementById("cuerpoTabla").innerHTML = filtrados.slice(0, 100).map(c => `
+    <tr>
+      <td>${c.fecha_de_firma.slice(0, 10)}</td>
+      <td>${escapar(c.nombre_entidad)}</td>
+      <td>${escapar(c.proveedor_adjudicado)}</td>
+      <td>${escapar((c.objeto_del_contrato || "").slice(0, 120))}…</td>
+      <td class="valor">${aPesos(Number(c.valor_del_contrato))}</td>
+      <td><a href="${c.urlproceso?.url || "#"}" target="_blank">Ver ↗</a></td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("buscador").addEventListener("input", aplicarFiltros);
+document.getElementById("filtroEntidad").addEventListener("change", aplicarFiltros);
+document.getElementById("filtroModalidad").addEventListener("change", aplicarFiltros);
+
+// ===== ARRANCAR =====
 cargarContratos();

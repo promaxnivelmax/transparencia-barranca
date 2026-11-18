@@ -60,3 +60,55 @@ h1 { font-size: 32px; color: #f8fafc; }
   color: #cbd5e1;
   margin-bottom: 16px;
 }
+.tabla-seccion {
+  margin-top: 24px;
+  background: #111827;
+  border: 1px solid #1f2a44;
+  border-radius: 16px;
+  padding: 20px;
+}
+
+.tabla-seccion h2 { font-size: 18px; margin-bottom: 16px; }
+
+.filtros {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 10px;
+}
+
+.filtros input, .filtros select {
+  background: #0b1120;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 14px;
+}
+
+.filtros input:focus, .filtros select:focus { outline: 2px solid #38bdf8; }
+
+.contador { color: #94a3b8; font-size: 13px; margin: 12px 0; }
+
+.tabla-contenedor { overflow-x: auto; }
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+th {
+  text-align: left;
+  color: #94a3b8;
+  padding: 10px;
+  border-bottom: 1px solid #334155;
+  white-space: nowrap;
+}
+
+td { padding: 10px; border-bottom: 1px solid #1f2a44; vertical-align: top; }
+
+tr:hover td { background: #1e293b; }
+
+td.valor { color: #34d399; white-space: nowrap; font-weight: bold; }
+
+td a { color: #38bdf8; text-decoration: none; }
+
+@media (max-width: 700px) {
+  .filtros { grid-template-columns: 1fr; }
+}
