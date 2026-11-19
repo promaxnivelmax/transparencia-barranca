@@ -1182,9 +1182,10 @@ async function iniciarMapa() {
 
   const mapa = L.map(contenedor, { scrollWheelZoom: false, zoomControl: true }).setView([7.065, -73.85], 13);
   app.mapa = mapa;
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 19, subdomains: "abcd",
-    attribution: '&copy; colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  // Mapa base público de OpenStreetMap: no necesita clave ni registro
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
   }).addTo(mapa);
 
   const iconoAmarillo = L.divIcon({ className: "marcador-amarillo", html: "<span></span>", iconSize: [18, 18] });

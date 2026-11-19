@@ -506,3 +506,6 @@ tbody tr { animation: aparecerArriba 0.35s ease both; }
 .lista-sectores b { color: var(--amarillo); margin-left: 6px; }
 .filtros-candidatos { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin: 14px 0 8px; }
 @media (max-width: 760px) { .filtros-candidatos { grid-template-columns: 1fr; } }
+
+/* Mapa de OpenStreetMap en modo oscuro (filtro sobre las imágenes del mapa) */
+.mapa-interactivo .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) grayscale(0.6); }
