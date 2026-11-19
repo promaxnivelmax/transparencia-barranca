@@ -1,6 +1,6 @@
 /* =========================================================
    TRANSPARENCIA BARRANCABERMEJA · Generador del resumen
-   Creado por Iván Rodríguez, Edil de la Comuna 5
+   Creado por Iván Rodríguez
 
    Este programa consulta SECOP, calcula el resumen de TODOS los años
    y lo guarda en datos/resumen.json. La página lee ese archivo al

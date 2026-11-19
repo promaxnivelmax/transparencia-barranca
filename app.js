@@ -2,7 +2,7 @@
 
 /* =========================================================
    TRANSPARENCIA BARRANCABERMEJA · app.js
-   Creado por Iván Rodríguez, Edil de la Comuna 5
+   Creado por Iván Rodríguez
 
    El tablero NO descarga los miles de contratos: le pide a SECOP
    que haga las sumas y conteos, y solo trae los resultados.
@@ -1379,7 +1379,7 @@ async function descargarExcel() {
       ["Consulta", new Date().toLocaleString("es-CO")],
       ["Periodo", $("anio").value || "Todos los años"],
       ["Contratos en el archivo", filas.length],
-      ["Elaborado con", "Transparencia Barrancabermeja · Iván Rodríguez, Edil de la Comuna 5"],
+      ["Elaborado con", "Transparencia Barrancabermeja · Creado por Iván Rodríguez"],
       ["Aviso", "Iniciativa ciudadana. Cifras indicativas según lo reportado por las entidades en SECOP II."]
     ]), "Fuente");
     XLSX.writeFile(libro, `contratos-barrancabermeja-${$("anio").value || "todos"}-${hoyISO()}.xlsx`);
